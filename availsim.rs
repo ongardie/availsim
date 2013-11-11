@@ -8,6 +8,7 @@ fn randrange(min : uint, max : uint) -> uint {
     min + rand::random::<uint>() % (max - min)
 }
 
+#[deriving(Eq)]
 struct ServerID(uint);
 
 #[deriving(Ord)]
@@ -56,6 +57,31 @@ enum MessageBody {
     },
 }
 
+impl fmt::Default for Message {
+    fn fmt(msg: &Message, f: &mut fmt::Formatter) {
+        write!(f.buf, "{} to {} in {}: {}",
+               *msg.from,
+               *msg.to,
+               *msg.term,
+               msg.body);
+    }
+}
+
+impl fmt::Default for MessageBody {
+    fn fmt(b: &MessageBody, f: &mut fmt::Formatter) {
+        match *b {
+            RequestVoteRequest{lastLogTerm, lastLogIndex} =>
+                write!(f.buf, "RequestVoteRequest({}, {})",
+                       lastLogTerm, lastLogIndex),
+            RequestVoteResponse{granted} =>
+                write!(f.buf, "RequestVoteResponse({})",
+                       granted),
+        }
+    }
+}
+
+
+
 enum ServerState {
     Follower  { timer: Time },
     Candidate { timer: Time, votes: uint },
@@ -65,6 +91,18 @@ enum ServerState {
 impl fmt::Default for Time {
     fn fmt(time: &Time, f: &mut fmt::Formatter) {
         write!(f.buf, "{}", **time)
+    }
+}
+
+impl fmt::Default for Term {
+    fn fmt(term: &Term, f: &mut fmt::Formatter) {
+        write!(f.buf, "{}", **term)
+    }
+}
+
+impl fmt::Default for Index {
+    fn fmt(index: &Index, f: &mut fmt::Formatter) {
+        write!(f.buf, "{}", **index)
     }
 }
 
@@ -120,7 +158,7 @@ impl Server {
         }
     }
     */
-    fn tick(&mut self, env: &Environment) {
+    fn tick(&mut self, env: &mut Environment) {
         match self.state {
             Follower  {timer, _} |
             Candidate {timer, _} => {
@@ -130,7 +168,21 @@ impl Server {
                         timer: env.make_time(150, 300),
                         votes: 1,
                     };
+                    for peer in range(1, env.num_servers) {
+                        if ServerID(peer) != self.id {
+                            env.network.push(Message {
+                                from: self.id,
+                                to: ServerID(peer),
+                                term: self.term,
+                                body: RequestVoteRequest {
+                                    lastLogTerm: Term(0),
+                                    lastLogIndex: Index(0),
+                                },
+                            });
+                        }
+                    }
                 }
+                self.try_become_leader(env);
             },
             Leader => {},
         }
@@ -215,13 +267,17 @@ fn main() {
     let env = &mut Environment::new(num_servers);
     let mut servers = Servers::new(env);
     loop {
-        for server in servers.iter() {
-            println(server.to_str());
-        }
         env.clock = Time(*env.clock + 1);
         for server in servers.mut_iter() {
             server.tick(env);
         }
+        for server in servers.iter() {
+            println(server.to_str());
+        }
+        for message in env.network.iter() {
+            println!("{}", *message);
+        }
+        println("");
     }
 
     env.network.push(Message {
@@ -234,8 +290,5 @@ fn main() {
         },
     });
 
-    for message in env.network.iter() {
-        println(format!("{} to {}", *message.from, *message.to));
-    }
 }
 
