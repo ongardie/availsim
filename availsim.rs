@@ -22,30 +22,26 @@ struct Time(uint);
 
 struct Environment {
     clock: Time,
-    num_servers: uint,
     network: ~[Message],
 }
 
 impl Environment {
-    fn new(num_servers: uint) -> Environment {
+    fn new() -> Environment {
         Environment {
             clock: Time(0),
-            num_servers: num_servers,
             network: ~[],
         }
     }
     fn make_time(&self, min: uint, max: uint) -> Time {
         Time(*self.clock + randrange(min, max))
     }
-    fn broadcast(&mut self, from: ServerID, body: &MessageBody) {
-        for peer in range(1, self.num_servers) {
-            if ServerID(peer) != from {
-                self.network.push(Message {
-                    from: from,
-                    to: ServerID(peer),
-                    body: *body,
-                });
-            }
+    fn multicast(&mut self, from: ServerID, to: &[ServerID], body: &MessageBody) {
+        for peer in to.iter() {
+            self.network.push(Message {
+                from: from,
+                to: *peer,
+                body: *body,
+            });
         }
     }
     fn reply(&mut self, request: &Message, responseBody: &MessageBody) {
@@ -158,6 +154,7 @@ impl Log {
 
 struct Server {
     id: ServerID,
+    peers: ~[ServerID],
     term: Term,
     state: ServerState,
     vote: Option<ServerID>,
@@ -165,9 +162,10 @@ struct Server {
 }
 
 impl Server {
-    fn new(id : ServerID, env: &Environment) -> Server {
+    fn new(id : ServerID, peers: ~[ServerID], env: &Environment) -> Server {
         Server {
             id: id,
+            peers: peers,
             term: Term(0),
             state: Follower { timer: env.make_time(150, 300) },
             log: Log::new(),
@@ -198,7 +196,7 @@ impl Server {
                         timer: env.make_time(150, 300),
                         votes: 1,
                     };
-                    env.broadcast(self.id, &RequestVoteRequest {
+                    env.multicast(self.id, self.peers, &RequestVoteRequest {
                         term: self.term,
                         lastLogTerm: Term(0),
                         lastLogIndex: Index(0),
@@ -221,9 +219,9 @@ impl Server {
         match self.state {
             Follower {_} => {},
             Candidate {votes, _} => {
-                if votes > env.num_servers / 2 {
+                if votes > (self.peers.len() + 1) / 2 {
                     self.state = Leader;
-                    env.broadcast(self.id, &Heartbeat {
+                    env.multicast(self.id, self.peers, &Heartbeat {
                         term: self.term,
                     });
                 }
@@ -304,10 +302,16 @@ impl ToStr for Server {
 struct Servers(~[Server]);
 
 impl Servers {
-    fn new(env: &Environment) -> Servers {
+    fn new(env: &Environment, num_servers: uint) -> Servers {
         let mut servers = ~[];
-        for i in range(0, env.num_servers) {
-            let s = Server::new(ServerID(i + 1), env);
+        for i in range(0, num_servers) {
+            let mut peers = ~[];
+            for j in range(0, num_servers) {
+                if i != j {
+                    peers.push(ServerID(j + 1));
+                }
+            }
+            let s = Server::new(ServerID(i + 1), peers, env);
             servers.push(s);
         }
         return Servers(servers);
@@ -349,8 +353,8 @@ fn main() {
         }},
         None => { 5 },
     };
-    let env = &mut Environment::new(num_servers);
-    let mut servers = Servers::new(env);
+    let env = &mut Environment::new();
+    let mut servers = Servers::new(env, num_servers);
     loop {
         env.clock = Time(*env.clock + 1);
         for server in servers.mut_iter() {
