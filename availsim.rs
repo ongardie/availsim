@@ -11,7 +11,7 @@ fn randrange(min : uint, max : uint) -> uint {
 #[deriving(Eq)]
 struct ServerID(uint);
 
-#[deriving(Ord)]
+#[deriving(Eq, Ord)]
 struct Term(uint);
 
 #[deriving(Ord)]
@@ -37,32 +37,53 @@ impl Environment {
     fn make_time(&self, min: uint, max: uint) -> Time {
         Time(*self.clock + randrange(min, max))
     }
+    fn broadcast(&mut self, from: ServerID, body: &MessageBody) {
+        for peer in range(1, self.num_servers) {
+            if ServerID(peer) != from {
+                self.network.push(Message {
+                    from: from,
+                    to: ServerID(peer),
+                    body: *body,
+                });
+            }
+        }
+    }
+    fn reply(&mut self, request: &Message, responseBody: &MessageBody) {
+        self.network.push(Message {
+            from: request.to,
+            to: request.from,
+            body: *responseBody,
+        });
+    }
+    fn popMessage(&mut self) -> Option<Message> {
+        return self.network.pop_opt();
+    }
 }
 
 
 struct Message {
     from: ServerID,
     to: ServerID,
-    term: Term,
     body: MessageBody,
 }
 
 enum MessageBody {
     RequestVoteRequest {
+        term: Term,
         lastLogTerm: Term,
         lastLogIndex: Index,
     },
     RequestVoteResponse {
+        term: Term,
         granted: bool,
     },
 }
 
 impl fmt::Default for Message {
     fn fmt(msg: &Message, f: &mut fmt::Formatter) {
-        write!(f.buf, "{} to {} in {}: {}",
+        write!(f.buf, "{} to {}: {}",
                *msg.from,
                *msg.to,
-               *msg.term,
                msg.body);
     }
 }
@@ -70,12 +91,12 @@ impl fmt::Default for Message {
 impl fmt::Default for MessageBody {
     fn fmt(b: &MessageBody, f: &mut fmt::Formatter) {
         match *b {
-            RequestVoteRequest{lastLogTerm, lastLogIndex} =>
-                write!(f.buf, "RequestVoteRequest({}, {})",
-                       lastLogTerm, lastLogIndex),
-            RequestVoteResponse{granted} =>
-                write!(f.buf, "RequestVoteResponse({})",
-                       granted),
+            RequestVoteRequest{term, lastLogTerm, lastLogIndex} =>
+                write!(f.buf, "RequestVoteRequest({}, {}, {})",
+                       term, lastLogTerm, lastLogIndex),
+            RequestVoteResponse{term, granted} =>
+                write!(f.buf, "RequestVoteResponse({}, {})",
+                       term, granted),
         }
     }
 }
@@ -133,6 +154,7 @@ struct Server {
     id: ServerID,
     term: Term,
     state: ServerState,
+    vote: Option<ServerID>,
     log: Log,
 }
 
@@ -143,6 +165,7 @@ impl Server {
             term: Term(0),
             state: Follower { timer: env.make_time(150, 300) },
             log: Log::new(),
+            vote: None,
         }
     }
     /*
@@ -164,29 +187,30 @@ impl Server {
             Candidate {timer, _} => {
                 if timer <= env.clock {
                     self.term = Term(*self.term + 1);
+                    self.vote = None;
                     self.state = Candidate {
                         timer: env.make_time(150, 300),
                         votes: 1,
                     };
-                    for peer in range(1, env.num_servers) {
-                        if ServerID(peer) != self.id {
-                            env.network.push(Message {
-                                from: self.id,
-                                to: ServerID(peer),
-                                term: self.term,
-                                body: RequestVoteRequest {
-                                    lastLogTerm: Term(0),
-                                    lastLogIndex: Index(0),
-                                },
-                            });
-                        }
-                    }
+                    env.broadcast(self.id, &RequestVoteRequest {
+                        term: self.term,
+                        lastLogTerm: Term(0),
+                        lastLogIndex: Index(0),
+                    });
                 }
                 self.try_become_leader(env);
             },
             Leader => {},
         }
     }
+    fn step_down(&mut self, env: &Environment, term: Term) {
+        self.term = term;
+        self.vote = None;
+        self.state = Follower {
+            timer: env.make_time(150, 300),
+        };
+    }
+
     fn try_become_leader(&mut self, env: &Environment) {
         match self.state {
             Follower {_} => {},
@@ -198,6 +222,49 @@ impl Server {
             Leader => {},
         }
     }
+    fn handle(&mut self, env: &mut Environment, msg: &Message) {
+        match msg.body {
+            RequestVoteRequest {term, _} => {
+                let reply = |granted| {
+                    env.reply(msg, &RequestVoteResponse {
+                        term: self.term,
+                        granted: granted,
+                    });
+                };
+                if term < self.term {
+                    reply(false);
+                } else {
+                    if term > self.term {
+                        self.step_down(env, term);
+                    }
+                    match self.vote {
+                        None => {
+                            self.vote = Some(msg.from);
+                            reply(true);
+                        },
+                        Some(c) => {
+                            reply(c == msg.from);
+                        },
+                    }
+                }
+            },
+            RequestVoteResponse {term, granted, _} => {
+                if term == self.term && granted {
+                    match self.state {
+                        Follower {_} => {},
+                        Candidate {votes: ref mut votes, _} => {
+                            *votes += 1;
+                        },
+                        Leader => {},
+                    }
+                    self.try_become_leader(env)
+                } else if term > self.term {
+                    self.step_down(env, term);
+                }
+            },
+        }
+    }
+
     /*
     fn next_event_time(&self) -> Time {
         match self.state {
@@ -232,7 +299,7 @@ impl Servers {
 
 fn main() {
     let args = std::os::args();
-    let opts = ~[
+    let opts = [
         getopts::optflag("h"),
         getopts::optflag("help"),
         getopts::optopt("servers"),
@@ -271,6 +338,12 @@ fn main() {
         for server in servers.mut_iter() {
             server.tick(env);
         }
+        match env.popMessage() {
+            None => {},
+            Some(msg) => {
+                servers[*msg.to - 1].handle(env, &msg);
+            },
+        }
         for server in servers.iter() {
             println(server.to_str());
         }
@@ -279,16 +352,5 @@ fn main() {
         }
         println("");
     }
-
-    env.network.push(Message {
-        from: ServerID(1),
-        to: ServerID(2),
-        term: Term(0),
-        body: RequestVoteRequest {
-            lastLogTerm: Term(0),
-            lastLogIndex: Index(0),
-        },
-    });
-
 }
 
