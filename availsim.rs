@@ -77,6 +77,9 @@ enum MessageBody {
         term: Term,
         granted: bool,
     },
+    Heartbeat {
+        term: Term,
+    },
 }
 
 impl fmt::Default for Message {
@@ -97,6 +100,9 @@ impl fmt::Default for MessageBody {
             RequestVoteResponse{term, granted} =>
                 write!(f.buf, "RequestVoteResponse({}, {})",
                        term, granted),
+            Heartbeat{term} =>
+                write!(f.buf, "Heartbeat({})",
+                       term),
         }
     }
 }
@@ -211,12 +217,15 @@ impl Server {
         };
     }
 
-    fn try_become_leader(&mut self, env: &Environment) {
+    fn try_become_leader(&mut self, env: &mut Environment) {
         match self.state {
             Follower {_} => {},
             Candidate {votes, _} => {
                 if votes > env.num_servers / 2 {
                     self.state = Leader;
+                    env.broadcast(self.id, &Heartbeat {
+                        term: self.term,
+                    });
                 }
             },
             Leader => {},
@@ -258,6 +267,15 @@ impl Server {
                         Leader => {},
                     }
                     self.try_become_leader(env)
+                } else if term > self.term {
+                    self.step_down(env, term);
+                }
+            },
+            Heartbeat {term} => {
+                if term == self.term {
+                    self.state = Follower {
+                        timer: env.make_time(150, 300),
+                    };
                 } else if term > self.term {
                     self.step_down(env, term);
                 }
