@@ -22,7 +22,7 @@ struct Time(uint);
 
 struct Environment {
     clock: Time,
-    network: ~[Message],
+    network: ~[~Message],
 }
 
 impl Environment {
@@ -35,24 +35,35 @@ impl Environment {
     fn make_time(&self, min: uint, max: uint) -> Time {
         Time(*self.clock + randrange(min, max))
     }
+    fn make_network_latency(&self, from: ServerID, to: ServerID) -> Time {
+        Time(*self.clock + randrange(2, 5))
+    }
     fn multicast(&mut self, from: ServerID, to: &[ServerID], body: &MessageBody) {
         for peer in to.iter() {
-            self.network.push(Message {
+            let m = ~Message {
                 from: from,
                 to: *peer,
+                deliver: self.make_network_latency(from, *peer),
                 body: *body,
-            });
+            };
+            self.network.push(m);
         }
     }
-    fn reply(&mut self, request: &Message, responseBody: &MessageBody) {
-        self.network.push(Message {
+    fn reply(&mut self, request: &Message, response_body: &MessageBody) {
+        let m = ~Message {
             from: request.to,
             to: request.from,
-            body: *responseBody,
-        });
+            deliver: self.make_network_latency(request.to, request.from),
+            body: *response_body,
+        };
+        self.network.push(m);
     }
-    fn popMessage(&mut self) -> Option<Message> {
-        return self.network.pop_opt();
+    fn pop_ready_messages(&mut self) -> ~[~Message] {
+        let mut all = ~[];
+        std::util::swap(&mut all, &mut self.network);
+        let (ready, notready) = all.partition(|msg| msg.deliver <= self.clock);
+        self.network = notready;
+        return ready;
     }
 }
 
@@ -60,6 +71,7 @@ impl Environment {
 struct Message {
     from: ServerID,
     to: ServerID,
+    deliver: Time,
     body: MessageBody,
 }
 
@@ -316,6 +328,10 @@ impl Servers {
         }
         return Servers(servers);
     }
+
+    fn deliver(&mut self, env: &mut Environment, msg: &Message) {
+        self[*msg.to - 1].handle(env, msg);
+    }
 }
 
 
@@ -360,17 +376,14 @@ fn main() {
         for server in servers.mut_iter() {
             server.tick(env);
         }
-        match env.popMessage() {
-            None => {},
-            Some(msg) => {
-                servers[*msg.to - 1].handle(env, &msg);
-            },
+        for msg in env.pop_ready_messages().move_iter() {
+            servers.deliver(env, msg);
         }
         for server in servers.iter() {
-            println(server.to_str());
+        //    println(server.to_str());
         }
         for message in env.network.iter() {
-            println!("{}", *message);
+            println!("{}", **message);
         }
         println("");
     }
