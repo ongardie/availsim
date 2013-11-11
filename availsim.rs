@@ -311,10 +311,10 @@ impl ToStr for Server {
     }
 }
 
-struct Servers(~[Server]);
+struct Cluster(~[Server]);
 
-impl Servers {
-    fn new(env: &Environment, num_servers: uint) -> Servers {
+impl Cluster {
+    fn new(env: &Environment, num_servers: uint) -> Cluster {
         let mut servers = ~[];
         for i in range(0, num_servers) {
             let mut peers = ~[];
@@ -326,7 +326,7 @@ impl Servers {
             let s = Server::new(ServerID(i + 1), peers, env);
             servers.push(s);
         }
-        return Servers(servers);
+        return Cluster(servers);
     }
 
     fn deliver(&mut self, env: &mut Environment, msg: &Message) {
@@ -370,18 +370,18 @@ fn main() {
         None => { 5 },
     };
     let env = &mut Environment::new();
-    let mut servers = Servers::new(env, num_servers);
+    let mut cluster = Cluster::new(env, num_servers);
     loop {
         env.clock = Time(*env.clock + 1);
-        for server in servers.mut_iter() {
+        for server in cluster.mut_iter() {
             server.tick(env);
         }
         for msg in env.pop_ready_messages().move_iter() {
-            servers.deliver(env, msg);
+            cluster.deliver(env, msg);
         }
-        for server in servers.iter() {
+        //for server in cluster.iter() {
         //    println(server.to_str());
-        }
+        //}
         for message in env.network.iter() {
             println!("{}", **message);
         }
