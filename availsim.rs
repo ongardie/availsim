@@ -2,7 +2,6 @@
 extern mod extra;
 use extra::getopts;
 use std::rand;
-use std::rc::RcMut;
 use std::fmt;
 
 fn randrange(min : uint, max : uint) -> uint {
@@ -93,7 +92,6 @@ impl Log {
 }
 
 struct Server {
-    env: RcMut<Environment>,
     id: ServerID,
     term: Term,
     state: ServerState,
@@ -101,12 +99,11 @@ struct Server {
 }
 
 impl Server {
-    fn new(id : ServerID, env: &RcMut<Environment>) -> Server {
+    fn new(id : ServerID, env: &Environment) -> Server {
         Server {
-            env: env.clone(),
             id: id,
             term: Term(0),
-            state: Follower { timer: env.with_borrow(|e| e.make_time(150, 300)) },
+            state: Follower { timer: env.make_time(150, 300) },
             log: Log::new(),
         }
     }
@@ -123,31 +120,27 @@ impl Server {
         }
     }
     */
-    fn tick(&mut self) {
+    fn tick(&mut self, env: &Environment) {
         match self.state {
             Follower  {timer, _} |
             Candidate {timer, _} => {
-                do self.env.with_borrow |env| {
-                    if timer <= env.clock {
-                        self.term = Term(*self.term + 1);
-                        self.state = Candidate {
-                            timer: env.make_time(150, 300),
-                            votes: 1,
-                        };
-                    }
+                if timer <= env.clock {
+                    self.term = Term(*self.term + 1);
+                    self.state = Candidate {
+                        timer: env.make_time(150, 300),
+                        votes: 1,
+                    };
                 }
             },
             Leader => {},
         }
     }
-    fn try_become_leader(&mut self) {
+    fn try_become_leader(&mut self, env: &Environment) {
         match self.state {
             Follower {_} => {},
             Candidate {votes, _} => {
-                do self.env.with_borrow |env| {
-                    if votes > env.num_servers / 2 {
-                        self.state = Leader;
-                    }
+                if votes > env.num_servers / 2 {
+                    self.state = Leader;
                 }
             },
             Leader => {},
@@ -174,13 +167,11 @@ impl ToStr for Server {
 struct Servers(~[Server]);
 
 impl Servers {
-    fn new(env: &RcMut<Environment>) -> Servers {
+    fn new(env: &Environment) -> Servers {
         let mut servers = ~[];
-        do env.with_borrow |e| {
-            for i in range(0, e.num_servers) {
-                let s = Server::new(ServerID(i + 1), env);
-                servers.push(s);
-            }
+        for i in range(0, env.num_servers) {
+            let s = Server::new(ServerID(i + 1), env);
+            servers.push(s);
         }
         return Servers(servers);
     }
@@ -221,35 +212,30 @@ fn main() {
         }},
         None => { 5 },
     };
-    let env = RcMut::new(Environment::new(num_servers));
-    let mut servers = Servers::new(&env);
+    let env = &mut Environment::new(num_servers);
+    let mut servers = Servers::new(env);
     loop {
         for server in servers.iter() {
             println(server.to_str());
         }
-        do env.with_mut_borrow |e| {
-            e.clock = Time(*e.clock + 1);
-        }
+        env.clock = Time(*env.clock + 1);
         for server in servers.mut_iter() {
-            server.tick();
+            server.tick(env);
         }
     }
 
-    do env.with_mut_borrow |e| {
-        e.network.push(Message {
-            from: ServerID(1),
-            to: ServerID(2),
-            term: Term(0),
-            body: RequestVoteRequest {
-                lastLogTerm: Term(0),
-                lastLogIndex: Index(0),
-            },
-        });
-    }
-    do env.with_borrow |e| {
-        for message in e.network.iter() {
-            println(format!("{} to {}", *message.from, *message.to));
-        }
+    env.network.push(Message {
+        from: ServerID(1),
+        to: ServerID(2),
+        term: Term(0),
+        body: RequestVoteRequest {
+            lastLogTerm: Term(0),
+            lastLogIndex: Index(0),
+        },
+    });
+
+    for message in env.network.iter() {
+        println(format!("{} to {}", *message.from, *message.to));
     }
 }
 
