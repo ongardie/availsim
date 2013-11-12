@@ -79,6 +79,9 @@ impl Environment {
         self.network.push(m);
     }
     fn pop_ready_messages(&mut self) -> ~[~Message] {
+        if !self.network.iter().any(|msg| msg.deliver <= self.clock) {
+            return ~[];
+        }
         let mut all = ~[];
         std::util::swap(&mut all, &mut self.network);
         let (ready, notready) = all.partition(|msg| msg.deliver <= self.clock);
@@ -411,7 +414,9 @@ fn main() {
     let opts = [
         getopts::optflag("h"),
         getopts::optflag("help"),
+        getopts::optopt("samples"),
         getopts::optopt("servers"),
+        getopts::optopt("tasks"),
     ];
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => { m },
@@ -419,8 +424,10 @@ fn main() {
     };
     let usage = || {
         println!("Usage: {} [options]", args[0]);
-        println("-h, --help   Print this help message");
-        println("--servers=N  Simulate cluster with N servers");
+        println("-h, --help    Print this help message");
+        println("--samples=N   Number of simulations (default 100,000)");
+        println("--servers=N   Simulate cluster with N servers");
+        println("--tasks=N     Number of parallel jobs (default 1)");
     };
     if matches.opt_present("h") || matches.opt_present("help") {
         usage();
@@ -430,6 +437,16 @@ fn main() {
         usage();
         fail!(format!("Extra arguments: {}", matches.free.len()));
     }
+    let num_samples : uint = match matches.opt_str("samples") {
+        Some(s) => { match std::from_str::from_str(s) {
+            Some(i) => { i },
+            None => {
+                usage();
+                fail!(format!("Couldn't parse number of samples from '{}'", s));
+            },
+        }},
+        None => { 100000 },
+    };
     let num_servers : uint = match matches.opt_str("servers") {
         Some(s) => { match std::from_str::from_str(s) {
             Some(i) => { i },
@@ -440,14 +457,49 @@ fn main() {
         }},
         None => { 5 },
     };
+    let num_tasks : uint = match matches.opt_str("tasks") {
+        Some(s) => { match std::from_str::from_str(s) {
+            Some(i) => { i },
+            None => {
+                usage();
+                fail!(format!("Couldn't parse number of tasks from '{}'", s));
+            },
+        }},
+        None => { 1 },
+    };
+
+    let (port, chan): (Port<~[Time]>, Chan<~[Time]>) = stream();
+    let chan = std::comm::SharedChan::new(chan);
+    for tid in range(0, num_tasks) {
+        let child_chan = chan.clone();
+        do spawn || {
+            let mut samples = ~[];
+            let n = if tid == 0 {
+                // get the odd one left over
+                num_samples - (num_samples / num_tasks) * (num_tasks - 1)
+            } else {
+                num_samples / num_tasks
+            };
+            samples.reserve(n);
+            do n.times {
+                samples.push(simulate(num_servers))
+            }
+            extra::sort::tim_sort(samples);
+            child_chan.send(samples);
+        }
+    }
+
     let mut samples = ~[];
-    for i in range(0, 10000) {
-        samples.push(simulate(num_servers))
+    samples.reserve(num_samples);
+    do num_tasks.times {
+        samples.push_all(port.recv());
     }
     extra::sort::tim_sort(samples);
-    println!("{}", samples[0]);
-    println!("{}", samples[samples.len()/2]);
-    println!("{}", samples[samples.len()-1]);
+
+    println!("Across {} trials:", samples.len());
+    println!("Min:    {} ticks", samples[0]);
+    println!("Median: {} ticks", samples[samples.len()/2]);
+    println!("Max:    {} ticks", samples[samples.len()-1]);
 }
 
 fn simulate(num_servers: uint) -> Time {
