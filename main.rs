@@ -3,7 +3,6 @@
 extern mod std;
 extern mod extra;
 use extra::getopts;
-use std::fmt;
 use basics::*;
 use policies::TimingPolicy;
 
@@ -85,37 +84,33 @@ fn main() {
 
     let start_ns = extra::time::precise_time_ns();
 
-    let (port, chan): (Port<~[Time]>, Chan<~[Time]>) = stream();
-    let chan = std::comm::SharedChan::new(chan);
-    for tid in range(0, num_tasks) {
-        let child_chan = chan.clone();
-        let child_timing = timing.clone();
-        do spawn || {
-            let mut samples = ~[];
-            let n = if tid == 0 {
-                // get the odd one left over
-                num_samples - (num_samples / num_tasks) * (num_tasks - 1)
-            } else {
-                num_samples / num_tasks
-            };
-            samples.reserve(n);
-            do n.times {
-                // TODO: may be better to reuse these timing policies.
-                let p = policies::make_timing_policy(child_timing);
-                let sample = sim::simulate(num_servers, p);
-                samples.push(sample);
+    let samples = if num_tasks <= 1 {
+        run_task(num_samples, num_servers, timing)
+    } else {
+        let (port, chan): (Port<~[Time]>, Chan<~[Time]>) = stream();
+        let chan = std::comm::SharedChan::new(chan);
+        for tid in range(0, num_tasks) {
+            let child_chan = chan.clone();
+            let child_timing = timing.clone();
+            do spawn || {
+                let n = if tid == 0 {
+                    // get the odd one left over
+                    num_samples - (num_samples / num_tasks) * (num_tasks - 1)
+                } else {
+                    num_samples / num_tasks
+                };
+                child_chan.send(run_task(n, num_servers, child_timing));
             }
-            extra::sort::tim_sort(samples);
-            child_chan.send(samples);
         }
-    }
 
-    let mut samples = ~[];
-    samples.reserve(num_samples);
-    do num_tasks.times {
-        samples.push_all(port.recv());
-    }
-    extra::sort::tim_sort(samples);
+        let mut samples = ~[];
+        samples.reserve(num_samples);
+        do num_tasks.times {
+            samples.push_all(port.recv());
+        }
+        extra::sort::tim_sort(samples);
+        samples
+    };
 
     let end_ns = extra::time::precise_time_ns();
     let elapsed_ns = end_ns - start_ns;
@@ -124,4 +119,17 @@ fn main() {
     println!("Median:  {} ticks", samples[samples.len()/2]);
     println!("Max:     {} ticks", samples[samples.len()-1]);
     println!("Wall:    {:.2f} s",     elapsed_ns as f64 / 1e9);
+}
+
+fn run_task(n: uint, num_servers: uint, timing: &str) -> ~[Time] {
+    let mut samples = ~[];
+    samples.reserve(n);
+    do n.times {
+        // TODO: may be better to reuse these timing policies.
+        let p = policies::make_timing_policy(timing);
+        let sample = sim::simulate(num_servers, p);
+        samples.push(sample);
+    }
+    extra::sort::tim_sort(samples);
+    return samples;
 }
