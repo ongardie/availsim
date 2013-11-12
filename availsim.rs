@@ -469,11 +469,12 @@ fn main() {
     };
     let usage = || {
         println!("Usage: {} [options]", args[0]);
-        println("-h, --help       Print this help message");
-        println("--samples=N      Number of simulations (default 10,000)");
-        println("--servers=N      Simulate cluster with N servers");
-        println("--tasks=N        Number of parallel jobs (default 1)");
-        println("--timing=POLICY  Number of timing policy (default LAN)");
+        println!("-h, --help       Print this help message");
+        println!("--samples=N      Number of simulations (default 10,000)");
+        println!("--servers=N      Simulate cluster with N servers");
+        println!("--tasks=N        Number of parallel jobs (default {})",
+                 std::rt::default_sched_threads() - 1);
+        println!("--timing=POLICY  Number of timing policy (default LAN)");
     };
     if matches.opt_present("h") || matches.opt_present("help") {
         usage();
@@ -511,7 +512,7 @@ fn main() {
                 fail!(format!("Couldn't parse number of tasks from '{}'", s));
             },
         }},
-        None => { 1 },
+        None => { std::rt::default_sched_threads() - 1 },
     };
     let timing : ~str = match matches.opt_str("timing") {
         Some(s) => { s },
@@ -574,8 +575,12 @@ fn make_timing_policy(name: &str) -> ~TimingPolicy {
                     latency_range: (2, 5),
         } as ~TimingPolicy,
         "P1" => ~PartitionedTimingPolicy(~[
-                        Partition::newInt([1, 2], make_timing_policy("Down")),
-                        Partition::newInt([3, 4, 5], make_timing_policy("LAN")),
+                    Partition::newInt([1],          make_timing_policy("Down")),
+                    Partition::newInt([2, 3, 4, 5], make_timing_policy("LAN")),
+        ]) as ~TimingPolicy,
+        "P2" => ~PartitionedTimingPolicy(~[
+                    Partition::newInt([1, 2],       make_timing_policy("Down")),
+                    Partition::newInt([3, 4, 5],    make_timing_policy("LAN")),
         ]) as ~TimingPolicy,
         _ => fail!("Unknown timing policy name: {}", name),
     }
