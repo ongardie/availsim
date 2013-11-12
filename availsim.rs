@@ -14,11 +14,31 @@ struct ServerID(uint);
 #[deriving(Eq, Ord)]
 struct Term(uint);
 
+impl fmt::Default for Term {
+    fn fmt(term: &Term, f: &mut fmt::Formatter) {
+        write!(f.buf, "{}", **term)
+    }
+}
+
+
 #[deriving(Ord)]
 struct Index(uint);
 
-#[deriving(Ord)]
+impl fmt::Default for Index {
+    fn fmt(index: &Index, f: &mut fmt::Formatter) {
+        write!(f.buf, "{}", **index)
+    }
+}
+
+
+#[deriving(Ord, Clone)]
 struct Time(uint);
+
+impl fmt::Default for Time {
+    fn fmt(time: &Time, f: &mut fmt::Formatter) {
+        write!(f.buf, "{}", **time)
+    }
+}
 
 struct Environment {
     clock: Time,
@@ -108,16 +128,16 @@ impl fmt::Default for MessageBody {
     fn fmt(b: &MessageBody, f: &mut fmt::Formatter) {
         match *b {
             RequestVoteRequest{term, lastLogTerm, lastLogIndex} =>
-                write!(f.buf, "RequestVoteRequest({}, {}, {})",
+                write!(f.buf, "RequestVoteRequest(term: {}, lastLogTerm: {}, lastLogIndex: {})",
                        term, lastLogTerm, lastLogIndex),
             RequestVoteResponse{term, granted} =>
-                write!(f.buf, "RequestVoteResponse({}, {})",
+                write!(f.buf, "RequestVoteResponse(term: {}, granted: {})",
                        term, granted),
             AppendEntriesRequest{term, seqno} =>
-                write!(f.buf, "AppendEntriesRequest({}, {})",
+                write!(f.buf, "AppendEntriesRequest(term: {}, seqno: {})",
                        term, seqno),
             AppendEntriesResponse{term, seqno} =>
-                write!(f.buf, "AppendEntriesResponse({}, {})",
+                write!(f.buf, "AppendEntriesResponse(term: {}, seqno: {})",
                        term, seqno),
         }
     }
@@ -128,33 +148,25 @@ impl fmt::Default for MessageBody {
 enum ServerState {
     Follower  { timer: Time },
     Candidate { timer: Time, votes: uint },
-    Leader    { timer: Time, heartbeat_seqno: uint,  acks: uint},
+    Leader    { timer: Time, heartbeat_seqno: uint, acks: uint, start_time: Time},
 }
 
-impl fmt::Default for Time {
-    fn fmt(time: &Time, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **time)
-    }
-}
-
-impl fmt::Default for Term {
-    fn fmt(term: &Term, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **term)
-    }
-}
-
-impl fmt::Default for Index {
-    fn fmt(index: &Index, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **index)
-    }
-}
 
 impl fmt::Default for ServerState {
     fn fmt(state: &ServerState, f: &mut fmt::Formatter) {
         match *state {
-            Follower{timer} => write!(f.buf, "Follower({})", timer),
-            Candidate{timer, votes} => write!(f.buf, "Candidate({}, {})", timer, votes),
-            Leader{timer, heartbeat_seqno, acks} => write!(f.buf, "Leader({}, {}, {})", timer, heartbeat_seqno, acks),
+            Follower{timer} => {
+                write!(f.buf, "Follower(timer: {})",
+                       timer)
+            },
+            Candidate{timer, votes} => {
+                write!(f.buf, "Candidate(timer: {}, votes: {})",
+                       timer, votes)
+            },
+            Leader{timer, heartbeat_seqno, acks, start_time} => {
+                write!(f.buf, "Leader(timer: {}, seqno: {}, acks: {}, start_time: {})",
+                       timer, heartbeat_seqno, acks, start_time)
+            },
         }
     }
 }
@@ -225,11 +237,12 @@ impl Server {
                 }
                 self.try_become_leader(env);
             },
-            Leader {timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks} => {
-                if timer <= env.clock {
+            Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, _} => {
+                if *timer <= env.clock {
                     if (*acks > (self.peers.len() + 1) / 2) {
                         *heartbeat_seqno += 1;
                         *acks = 0;
+                        *timer = env.make_time(75, 76);
                         env.multicast(self.id, self.peers, &AppendEntriesRequest {
                             term: self.term,
                             seqno: *heartbeat_seqno,
@@ -241,6 +254,7 @@ impl Server {
             },
         }
         if need_step_down {
+            println!("Failed to maintain leadership: {}", *self);
             self.step_down(env, self.term)
         }
     }
@@ -261,6 +275,7 @@ impl Server {
                         timer: env.make_time(75, 76),
                         heartbeat_seqno: 0,
                         acks: 1,
+                        start_time: env.clock,
                     };
                     env.multicast(self.id, self.peers, &AppendEntriesRequest {
                         term: self.term,
@@ -271,6 +286,16 @@ impl Server {
             Leader {_} => {},
         }
     }
+
+
+    fn stable_leader_start_time(&self) -> Option<Time> {
+        match self.state {
+            Leader {heartbeat_seqno, start_time, _} if heartbeat_seqno > 4 => Some(start_time),
+            _ => None,
+        }
+    }
+
+
     fn handle(&mut self, env: &mut Environment, msg: &Message) {
         match msg.body {
             RequestVoteRequest {term, _} => {
@@ -351,9 +376,9 @@ impl Server {
     */
 }
 
-impl ToStr for Server {
-    fn to_str(&self) -> ~str {
-        format!("Server {}: {}", *self.id, self.state)
+impl fmt::Default for Server {
+    fn fmt(server: &Server, f: &mut fmt::Formatter) {
+        write!(f.buf, "Server {}: {}", *server.id, server.state)
     }
 }
 
@@ -415,9 +440,21 @@ fn main() {
         }},
         None => { 5 },
     };
+    let mut samples = ~[];
+    for i in range(0, 10000) {
+        samples.push(simulate(num_servers))
+    }
+    extra::sort::tim_sort(samples);
+    println!("{}", samples[0]);
+    println!("{}", samples[samples.len()/2]);
+    println!("{}", samples[samples.len()-1]);
+}
+
+fn simulate(num_servers: uint) -> Time {
     let env = &mut Environment::new();
     let mut cluster = Cluster::new(env, num_servers);
-    loop {
+    let mut end = None;
+    while end.is_none() {
         env.clock = Time(*env.clock + 1);
         for server in cluster.mut_iter() {
             server.tick(env);
@@ -425,12 +462,23 @@ fn main() {
         for msg in env.pop_ready_messages().move_iter() {
             cluster.deliver(env, msg);
         }
-        //for server in cluster.iter() {
-        //    println(server.to_str());
-        //}
+        for server in cluster.iter() {
+            end = server.stable_leader_start_time();
+            if end.is_some() {
+                break;
+            }
+        }
+        /*
+        println!("Tick: {}", env.clock);
+        for server in cluster.iter() {
+            println!("{}", *server);
+        }
         for message in env.network.iter() {
             println!("{}", **message);
         }
+        println!("");
+        */
     }
+    return end.unwrap();
 }
 
