@@ -5,10 +5,10 @@ use std::rand;
 use std::fmt;
 
 fn randrange(min : uint, max : uint) -> uint {
-    min + rand::random::<uint>() % (max - min)
+    min + rand::random::<uint>() % (max - min + 1)
 }
 
-#[deriving(Eq)]
+#[deriving(Eq, IterBytes, Clone)]
 struct ServerID(uint);
 
 #[deriving(Eq, Ord)]
@@ -34,6 +34,11 @@ impl fmt::Default for Index {
 #[deriving(Ord, Clone)]
 struct Time(uint);
 
+// An integer big enough to represent infinity in the simulations, but small
+// enough that it'll never overflow.
+static NEVER : uint = 1<<30;
+
+
 impl Add<uint, Time> for Time {
     fn add(&self, rhs: &uint) -> Time {
       Time(**self + *rhs)
@@ -53,18 +58,59 @@ struct Environment {
 }
 
 trait TimingPolicy {
-    fn network_latency(&self, from: ServerID, to: ServerID) -> uint;
+    fn network_latency(&self, _from: ServerID, _to: ServerID) -> uint;
 }
 
 struct UniformTimingPolicy {
     latency_range : (uint, uint),
 }
-
 impl TimingPolicy for UniformTimingPolicy {
-    fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
+    fn network_latency(&self, _from: ServerID, _to: ServerID) -> uint {
         match self.latency_range {
           (min, max) => randrange(min, max)
         }
+    }
+}
+
+struct Partition {
+    servers: std::hashmap::HashSet<ServerID>,
+    timing: ~TimingPolicy,
+}
+
+impl Partition {
+    fn new(ids: &[ServerID], timing: ~TimingPolicy) -> Partition {
+        Partition {
+            servers: newHashSet(ids),
+            timing: timing,
+        }
+    }
+    fn newInt(ids: &[uint], timing: ~TimingPolicy) -> Partition {
+        Partition {
+            servers: newHashSet(ids.map(|id| ServerID(*id))),
+            timing: timing,
+        }
+    }
+}
+
+fn newHashSet<T: Clone + IterBytes + Hash + Eq>(elements: &[T]) -> std::hashmap::HashSet<T> {
+    let mut set = std::hashmap::HashSet::new();
+    for e in elements.iter() {
+        set.insert(e.clone());
+    }
+    return set;
+}
+
+struct PartitionedTimingPolicy(~[Partition]);
+
+impl TimingPolicy for PartitionedTimingPolicy {
+    fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
+        for partition in self.iter() {
+            if partition.servers.contains(&from) &&
+               partition.servers.contains(&to) {
+                return partition.timing.network_latency(from, to);
+            }
+        }
+        return NEVER;
     }
 }
 
@@ -223,7 +269,7 @@ impl Server {
             id: id,
             peers: peers,
             term: Term(0),
-            state: Follower { timer: env.make_time(150, 300) },
+            state: Follower { timer: env.make_time(150, 299) },
             log: Log::new(),
             vote: None,
         }
@@ -237,7 +283,7 @@ impl Server {
                     self.term = Term(*self.term + 1);
                     self.vote = None;
                     self.state = Candidate {
-                        timer: env.make_time(150, 300),
+                        timer: env.make_time(150, 299),
                         votes: 1,
                     };
                     env.multicast(self.id, self.peers, &RequestVoteRequest {
@@ -253,7 +299,7 @@ impl Server {
                     if (*acks > (self.peers.len() + 1) / 2) {
                         *heartbeat_seqno += 1;
                         *acks = 0;
-                        *timer = env.make_time(75, 76);
+                        *timer = env.make_time(75, 75);
                         env.multicast(self.id, self.peers, &AppendEntriesRequest {
                             term: self.term,
                             seqno: *heartbeat_seqno,
@@ -273,7 +319,7 @@ impl Server {
         self.term = term;
         self.vote = None;
         self.state = Follower {
-            timer: env.make_time(150, 300),
+            timer: env.make_time(150, 299),
         };
     }
 
@@ -283,7 +329,7 @@ impl Server {
             Candidate {votes, _} => {
                 if votes > (self.peers.len() + 1) / 2 {
                     self.state = Leader {
-                        timer: env.make_time(75, 76),
+                        timer: env.make_time(75, 75),
                         heartbeat_seqno: 0,
                         acks: 1,
                         start_time: env.clock,
@@ -350,7 +396,7 @@ impl Server {
             AppendEntriesRequest {term, seqno} => {
                 if term == self.term {
                     self.state = Follower {
-                        timer: env.make_time(150, 300),
+                        timer: env.make_time(150, 299),
                     };
                 } else if term > self.term {
                     self.step_down(env, term);
@@ -415,6 +461,7 @@ fn main() {
         getopts::optopt("samples"),
         getopts::optopt("servers"),
         getopts::optopt("tasks"),
+        getopts::optopt("timing"),
     ];
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => { m },
@@ -422,10 +469,11 @@ fn main() {
     };
     let usage = || {
         println!("Usage: {} [options]", args[0]);
-        println("-h, --help    Print this help message");
-        println("--samples=N   Number of simulations (default 100,000)");
-        println("--servers=N   Simulate cluster with N servers");
-        println("--tasks=N     Number of parallel jobs (default 1)");
+        println("-h, --help       Print this help message");
+        println("--samples=N      Number of simulations (default 10,000)");
+        println("--servers=N      Simulate cluster with N servers");
+        println("--tasks=N        Number of parallel jobs (default 1)");
+        println("--timing=POLICY  Number of timing policy (default LAN)");
     };
     if matches.opt_present("h") || matches.opt_present("help") {
         usage();
@@ -443,7 +491,7 @@ fn main() {
                 fail!(format!("Couldn't parse number of samples from '{}'", s));
             },
         }},
-        None => { 100000 },
+        None => { 10000 },
     };
     let num_servers : uint = match matches.opt_str("servers") {
         Some(s) => { match std::from_str::from_str(s) {
@@ -465,11 +513,23 @@ fn main() {
         }},
         None => { 1 },
     };
+    let timing : ~str = match matches.opt_str("timing") {
+        Some(s) => { s },
+        None => { ~"LAN" },
+    };
+
+    println!("Servers: {}", num_servers)
+    println!("Tasks:   {}", num_tasks)
+    println!("Trials:  {}", num_samples)
+    println!("Timing:  {}", timing)
+
+    let start_ns = extra::time::precise_time_ns();
 
     let (port, chan): (Port<~[Time]>, Chan<~[Time]>) = stream();
     let chan = std::comm::SharedChan::new(chan);
     for tid in range(0, num_tasks) {
         let child_chan = chan.clone();
+        let child_timing = timing.clone();
         do spawn || {
             let mut samples = ~[];
             let n = if tid == 0 {
@@ -480,7 +540,9 @@ fn main() {
             };
             samples.reserve(n);
             do n.times {
-                samples.push(simulate(num_servers))
+                let p = make_timing_policy(child_timing);
+                let sample = simulate(num_servers, p);
+                samples.push(sample);
             }
             extra::sort::tim_sort(samples);
             child_chan.send(samples);
@@ -494,16 +556,34 @@ fn main() {
     }
     extra::sort::tim_sort(samples);
 
-    println!("Across {} trials:", samples.len());
-    println!("Min:    {} ticks", samples[0]);
-    println!("Median: {} ticks", samples[samples.len()/2]);
-    println!("Max:    {} ticks", samples[samples.len()-1]);
+    let end_ns = extra::time::precise_time_ns();
+    let elapsed_ns = end_ns - start_ns;
+
+    println!("Min:     {} ticks", samples[0]);
+    println!("Median:  {} ticks", samples[samples.len()/2]);
+    println!("Max:     {} ticks", samples[samples.len()-1]);
+    println!("Wall:    {:.2f} s",     elapsed_ns as f64 / 1e9);
 }
 
-fn simulate(num_servers: uint) -> Time {
-    let env = &mut Environment::new(~UniformTimingPolicy {
+fn make_timing_policy(name: &str) -> ~TimingPolicy {
+    return match name {
+        "Down" => ~UniformTimingPolicy {
+                    latency_range: (NEVER, NEVER),
+        } as ~TimingPolicy,
+        "LAN" => ~UniformTimingPolicy {
                     latency_range: (2, 5),
-                } as ~TimingPolicy);
+        } as ~TimingPolicy,
+        "P1" => ~PartitionedTimingPolicy(~[
+                        Partition::newInt([1, 2], make_timing_policy("Down")),
+                        Partition::newInt([3, 4, 5], make_timing_policy("LAN")),
+        ]) as ~TimingPolicy,
+        _ => fail!("Unknown timing policy name: {}", name),
+    }
+}
+
+
+fn simulate(num_servers: uint, timing_policy: ~TimingPolicy) -> Time {
+    let env = &mut Environment::new(timing_policy);
     let mut cluster = Cluster::new(env, num_servers);
     let mut end = None;
     while end.is_none() {
@@ -521,6 +601,7 @@ fn simulate(num_servers: uint) -> Time {
             }
         }
         /*
+        // useful for debugging:
         println!("Tick: {}", env.clock);
         for server in cluster.iter() {
             println!("{}", *server);
