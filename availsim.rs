@@ -1,4 +1,4 @@
- #[feature(struct_variant)];
+#[feature(struct_variant)];
 extern mod extra;
 use extra::getopts;
 use std::rand;
@@ -563,6 +563,7 @@ fn main() {
             };
             samples.reserve(n);
             do n.times {
+                // TODO: may be better to reuse these timing policies.
                 let p = make_timing_policy(child_timing);
                 let sample = simulate(num_servers, p);
                 samples.push(sample);
