@@ -34,6 +34,12 @@ impl fmt::Default for Index {
 #[deriving(Ord, Clone)]
 struct Time(uint);
 
+impl Add<uint, Time> for Time {
+    fn add(&self, rhs: &uint) -> Time {
+      Time(**self + *rhs)
+  }
+}
+
 impl fmt::Default for Time {
     fn fmt(time: &Time, f: &mut fmt::Formatter) {
         write!(f.buf, "{}", **time)
@@ -43,27 +49,42 @@ impl fmt::Default for Time {
 struct Environment {
     clock: Time,
     network: ~[~Message],
+    timing: ~TimingPolicy,
+}
+
+trait TimingPolicy {
+    fn network_latency(&self, from: ServerID, to: ServerID) -> uint;
+}
+
+struct UniformTimingPolicy {
+    latency_range : (uint, uint),
+}
+
+impl TimingPolicy for UniformTimingPolicy {
+    fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
+        match self.latency_range {
+          (min, max) => randrange(min, max)
+        }
+    }
 }
 
 impl Environment {
-    fn new() -> Environment {
+    fn new(timing: ~TimingPolicy) -> Environment {
         Environment {
             clock: Time(0),
             network: ~[],
+            timing: timing,
         }
     }
     fn make_time(&self, min: uint, max: uint) -> Time {
-        Time(*self.clock + randrange(min, max))
-    }
-    fn make_network_latency(&self, from: ServerID, to: ServerID) -> Time {
-        Time(*self.clock + randrange(2, 5))
+        self.clock + randrange(min, max)
     }
     fn multicast(&mut self, from: ServerID, to: &[ServerID], body: &MessageBody) {
         for peer in to.iter() {
             let m = ~Message {
                 from: from,
                 to: *peer,
-                deliver: self.make_network_latency(from, *peer),
+                deliver: self.clock + self.timing.network_latency(from, *peer),
                 body: *body,
             };
             self.network.push(m);
@@ -73,7 +94,7 @@ impl Environment {
         let m = ~Message {
             from: request.to,
             to: request.from,
-            deliver: self.make_network_latency(request.to, request.from),
+            deliver: self.clock + self.timing.network_latency(request.to, request.from),
             body: *response_body,
         };
         self.network.push(m);
@@ -503,7 +524,9 @@ fn main() {
 }
 
 fn simulate(num_servers: uint) -> Time {
-    let env = &mut Environment::new();
+    let env = &mut Environment::new(~UniformTimingPolicy {
+                    latency_range: (2, 5),
+                } as ~TimingPolicy);
     let mut cluster = Cluster::new(env, num_servers);
     let mut end = None;
     while end.is_none() {
