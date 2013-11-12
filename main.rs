@@ -126,7 +126,7 @@ fn run_task(n: uint, num_servers: uint, timing: &str) -> ~[Time] {
     samples.reserve(n);
     do n.times {
         // TODO: may be better to reuse these timing policies.
-        let p = policies::make_timing_policy(timing);
+        let p = policies::make(timing);
         let sample = sim::simulate(num_servers, p);
         samples.push(sample);
     }
