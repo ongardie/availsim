@@ -228,19 +228,6 @@ impl Server {
             vote: None,
         }
     }
-    /*
-    fn reset_timer(&mut self) {
-        self.set_timer(Time(*self.env.clock + randrange(150, 300)));
-    }
-    fn set_timer(&mut self, time: Time) {
-        match self.state {
-            Follower  {timer : ref mut timer, _} |
-            Candidate {timer : ref mut timer, _} =>
-                { *timer = time },
-            Leader => {},
-        }
-    }
-    */
     fn tick(&mut self, env: &mut Environment) {
         let mut need_step_down = false;
         match self.state {
@@ -388,17 +375,7 @@ impl Server {
         }
     }
 
-    /*
-    fn next_event_time(&self) -> Time {
-        match self.state {
-            Follower  {timer, _} |
-            Candidate {timer, _} =>
-                timer,
-            Leader => Time(!0)
-        }
-    }
-    */
-}
+} // Server impl
 
 impl fmt::Default for Server {
     fn fmt(server: &Server, f: &mut fmt::Formatter) {
