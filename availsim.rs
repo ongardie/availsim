@@ -1,139 +1,18 @@
+#[feature(globs)];
 #[feature(struct_variant)];
 extern mod extra;
 use extra::getopts;
-use std::rand;
 use std::fmt;
+use basics::*;
+use policies::TimingPolicy;
 
-fn randrange(min : uint, max : uint) -> uint {
-    min + rand::random::<uint>() % (max - min + 1)
-}
-
-#[deriving(Eq, IterBytes, Clone)]
-struct ServerID(uint);
-
-#[deriving(Eq, Ord)]
-struct Term(uint);
-
-impl fmt::Default for Term {
-    fn fmt(term: &Term, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **term)
-    }
-}
-
-
-#[deriving(Ord)]
-struct Index(uint);
-
-impl fmt::Default for Index {
-    fn fmt(index: &Index, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **index)
-    }
-}
-
-
-#[deriving(Ord, Clone)]
-struct Time(uint);
-
-// An integer big enough to represent infinity in the simulations, but small
-// enough that it'll never overflow.
-static NEVER : uint = 1<<30;
-
-
-impl Add<uint, Time> for Time {
-    fn add(&self, rhs: &uint) -> Time {
-      Time(**self + *rhs)
-  }
-}
-
-impl fmt::Default for Time {
-    fn fmt(time: &Time, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **time)
-    }
-}
+mod basics;
+mod policies;
 
 struct Environment {
     clock: Time,
     network: ~[~Message],
     timing: ~TimingPolicy,
-}
-
-trait TimingPolicy {
-    fn network_latency(&self, from: ServerID, to: ServerID) -> uint;
-}
-
-struct UniformTimingPolicy {
-    latency_range : (uint, uint),
-}
-impl TimingPolicy for UniformTimingPolicy {
-    fn network_latency(&self, _from: ServerID, _to: ServerID) -> uint {
-        match self.latency_range {
-          (min, max) => randrange(min, max)
-        }
-    }
-}
-
-struct PartitionedTimingPolicy(~[Partition]);
-
-struct Partition {
-    servers: std::hashmap::HashSet<ServerID>,
-    timing: ~TimingPolicy,
-}
-
-impl Partition {
-    fn new(ids: &[ServerID], timing: ~TimingPolicy) -> Partition {
-        Partition {
-            servers: newHashSet(ids),
-            timing: timing,
-        }
-    }
-    fn newInt(ids: &[uint], timing: ~TimingPolicy) -> Partition {
-        Partition {
-            servers: newHashSet(ids.map(|id| ServerID(*id))),
-            timing: timing,
-        }
-    }
-}
-
-struct Link {
-    from: ServerID,
-    to: ServerID,
-    timing: ~TimingPolicy,
-}
-
-struct BadLinks {
-    links: ~[Link],
-    other: ~TimingPolicy,
-}
-
-impl TimingPolicy for BadLinks {
-    fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
-        for link in self.links.iter() {
-            if link.from == from && link.to == to {
-                return link.timing.network_latency(from, to);
-            }
-        }
-        return self.other.network_latency(from, to);
-    }
-}
-
-fn newHashSet<T: Clone + IterBytes + Hash + Eq>(elements: &[T]) -> std::hashmap::HashSet<T> {
-    let mut set = std::hashmap::HashSet::new();
-    for e in elements.iter() {
-        set.insert(e.clone());
-    }
-    return set;
-}
-
-impl TimingPolicy for PartitionedTimingPolicy {
-    fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
-        for partition in self.iter() {
-            if partition.servers.contains(&from) &&
-               partition.servers.contains(&to) {
-                return partition.timing.network_latency(from, to);
-            }
-        }
-        return NEVER;
-    }
 }
 
 impl Environment {
@@ -564,7 +443,7 @@ fn main() {
             samples.reserve(n);
             do n.times {
                 // TODO: may be better to reuse these timing policies.
-                let p = make_timing_policy(child_timing);
+                let p = policies::make_timing_policy(child_timing);
                 let sample = simulate(num_servers, p);
                 samples.push(sample);
             }
@@ -588,39 +467,6 @@ fn main() {
     println!("Max:     {} ticks", samples[samples.len()-1]);
     println!("Wall:    {:.2f} s",     elapsed_ns as f64 / 1e9);
 }
-
-fn make_timing_policy(name: &str) -> ~TimingPolicy {
-    return match name {
-        "Down" => ~UniformTimingPolicy {
-                    latency_range: (NEVER, NEVER),
-        } as ~TimingPolicy,
-        "LAN" => ~UniformTimingPolicy {
-                    latency_range: (2, 5),
-        } as ~TimingPolicy,
-        "WAN" => ~UniformTimingPolicy {
-                    latency_range: (30, 70),
-        } as ~TimingPolicy,
-        "P1" => ~PartitionedTimingPolicy(~[
-                    Partition::newInt([1],          make_timing_policy("Down")),
-                    Partition::newInt([2, 3, 4, 5], make_timing_policy("LAN")),
-        ]) as ~TimingPolicy,
-        "P2" => ~PartitionedTimingPolicy(~[
-                    Partition::newInt([1, 2],       make_timing_policy("Down")),
-                    Partition::newInt([3, 4, 5],    make_timing_policy("LAN")),
-        ]) as ~TimingPolicy,
-        "L1" => ~BadLinks {
-            links: ~[Link{ from: ServerID(1), to: ServerID(2),
-                           timing: make_timing_policy("WAN") }],
-            other: make_timing_policy("LAN"),
-        } as ~TimingPolicy,
-        "Deian" => ~PartitionedTimingPolicy(~[
-                    Partition::newInt([1,2,3,4],   make_timing_policy("LAN")),
-                    Partition::newInt([1,2,3,4,5], make_timing_policy("WAN")),
-        ]) as ~TimingPolicy,
-        _ => fail!("Unknown timing policy name: {}", name),
-    }
-}
-
 
 fn simulate(num_servers: uint, timing_policy: ~TimingPolicy) -> Time {
     let env = &mut Environment::new(timing_policy);
