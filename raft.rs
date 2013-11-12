@@ -1,72 +1,24 @@
 #[feature(globs)];
-#[feature(struct_variant)];
-extern mod extra;
-use extra::getopts;
-use std::fmt;
 use basics::*;
-use policies::TimingPolicy;
+use std::fmt;
+use sim::Environment;
 
-mod basics;
-mod policies;
-
-struct Environment {
-    clock: Time,
-    network: ~[~Message],
-    timing: ~TimingPolicy,
-}
-
-impl Environment {
-    fn new(timing: ~TimingPolicy) -> Environment {
-        Environment {
-            clock: Time(0),
-            network: ~[],
-            timing: timing,
-        }
-    }
-    fn make_time(&self, min: uint, max: uint) -> Time {
-        self.clock + randrange(min, max)
-    }
-    fn multicast(&mut self, from: ServerID, to: &[ServerID], body: &MessageBody) {
-        for peer in to.iter() {
-            let m = ~Message {
-                from: from,
-                to: *peer,
-                deliver: self.clock + self.timing.network_latency(from, *peer),
-                body: *body,
-            };
-            self.network.push(m);
-        }
-    }
-    fn reply(&mut self, request: &Message, response_body: &MessageBody) {
-        let m = ~Message {
-            from: request.to,
-            to: request.from,
-            deliver: self.clock + self.timing.network_latency(request.to, request.from),
-            body: *response_body,
-        };
-        self.network.push(m);
-    }
-    fn pop_ready_messages(&mut self) -> ~[~Message] {
-        if !self.network.iter().any(|msg| msg.deliver <= self.clock) {
-            return ~[];
-        }
-        let mut all = ~[];
-        std::util::swap(&mut all, &mut self.network);
-        let (ready, notready) = all.partition(|msg| msg.deliver <= self.clock);
-        self.network = notready;
-        return ready;
-    }
-}
-
-
-struct Message {
+pub struct Message {
     from: ServerID,
     to: ServerID,
-    deliver: Time,
     body: MessageBody,
 }
 
-enum MessageBody {
+impl fmt::Default for Message {
+    fn fmt(msg: &Message, f: &mut fmt::Formatter) {
+        write!(f.buf, "{} to {}: {}",
+               *msg.from,
+               *msg.to,
+               msg.body);
+    }
+}
+
+pub enum MessageBody {
     RequestVoteRequest {
         term: Term,
         lastLogTerm: Term,
@@ -84,15 +36,6 @@ enum MessageBody {
         term: Term,
         seqno: uint,
     },
-}
-
-impl fmt::Default for Message {
-    fn fmt(msg: &Message, f: &mut fmt::Formatter) {
-        write!(f.buf, "{} to {}: {}",
-               *msg.from,
-               *msg.to,
-               msg.body);
-    }
 }
 
 impl fmt::Default for MessageBody {
@@ -165,7 +108,7 @@ struct Server {
 }
 
 impl Server {
-    fn new(id : ServerID, peers: ~[ServerID], env: &Environment) -> Server {
+    pub fn new(id : ServerID, peers: ~[ServerID], env: &Environment) -> Server {
         Server {
             id: id,
             peers: peers,
@@ -175,7 +118,7 @@ impl Server {
             vote: None,
         }
     }
-    fn tick(&mut self, env: &mut Environment) {
+    pub fn tick(&mut self, env: &mut Environment) {
         let mut need_step_down = false;
         match self.state {
             Follower  {timer, _} |
@@ -246,7 +189,7 @@ impl Server {
     }
 
 
-    fn stable_leader_start_time(&self) -> Option<Time> {
+    pub fn stable_leader_start_time(&self) -> Option<Time> {
         match self.state {
             Leader {heartbeat_seqno, start_time, _} if heartbeat_seqno > 4 => Some(start_time),
             _ => None,
@@ -254,7 +197,7 @@ impl Server {
     }
 
 
-    fn handle(&mut self, env: &mut Environment, msg: &Message) {
+    pub fn handle(&mut self, env: &mut Environment, msg: &Message) {
         match msg.body {
             RequestVoteRequest {term, _} => {
                 let reply = |granted| {
@@ -328,176 +271,5 @@ impl fmt::Default for Server {
     fn fmt(server: &Server, f: &mut fmt::Formatter) {
         write!(f.buf, "Server {}: {}", *server.id, server.state)
     }
-}
-
-struct Cluster(~[Server]);
-
-impl Cluster {
-    fn new(env: &Environment, num_servers: uint) -> Cluster {
-        let mut servers = ~[];
-        for i in range(0, num_servers) {
-            let mut peers = ~[];
-            for j in range(0, num_servers) {
-                if i != j {
-                    peers.push(ServerID(j + 1));
-                }
-            }
-            let s = Server::new(ServerID(i + 1), peers, env);
-            servers.push(s);
-        }
-        return Cluster(servers);
-    }
-
-    fn deliver(&mut self, env: &mut Environment, msg: &Message) {
-        self[*msg.to - 1].handle(env, msg);
-    }
-}
-
-
-fn main() {
-    let args = std::os::args();
-    let opts = [
-        getopts::optflag("h"),
-        getopts::optflag("help"),
-        getopts::optopt("samples"),
-        getopts::optopt("servers"),
-        getopts::optopt("tasks"),
-        getopts::optopt("timing"),
-    ];
-    let matches = match getopts::getopts(args.tail(), opts) {
-        Ok(m) => { m },
-        Err(f) => { fail!(f.to_err_msg()) },
-    };
-    let usage = || {
-        println!("Usage: {} [options]", args[0]);
-        println!("-h, --help       Print this help message");
-        println!("--samples=N      Number of simulations (default 10,000)");
-        println!("--servers=N      Simulate cluster with N servers");
-        println!("--tasks=N        Number of parallel jobs (default {})",
-                 std::rt::default_sched_threads() - 1);
-        println!("--timing=POLICY  Number of timing policy (default LAN)");
-    };
-    if matches.opt_present("h") || matches.opt_present("help") {
-        usage();
-        return;
-    }
-    if !matches.free.is_empty() {
-        usage();
-        fail!(format!("Extra arguments: {}", matches.free.len()));
-    }
-    let num_samples : uint = match matches.opt_str("samples") {
-        Some(s) => { match std::from_str::from_str(s) {
-            Some(i) => { i },
-            None => {
-                usage();
-                fail!(format!("Couldn't parse number of samples from '{}'", s));
-            },
-        }},
-        None => { 10000 },
-    };
-    let num_servers : uint = match matches.opt_str("servers") {
-        Some(s) => { match std::from_str::from_str(s) {
-            Some(i) => { i },
-            None => {
-                usage();
-                fail!(format!("Couldn't parse number of servers from '{}'", s));
-            },
-        }},
-        None => { 5 },
-    };
-    let num_tasks : uint = match matches.opt_str("tasks") {
-        Some(s) => { match std::from_str::from_str(s) {
-            Some(i) => { i },
-            None => {
-                usage();
-                fail!(format!("Couldn't parse number of tasks from '{}'", s));
-            },
-        }},
-        None => { std::rt::default_sched_threads() - 1 },
-    };
-    let timing : ~str = match matches.opt_str("timing") {
-        Some(s) => { s },
-        None => { ~"LAN" },
-    };
-
-    println!("Servers: {}", num_servers)
-    println!("Tasks:   {}", num_tasks)
-    println!("Trials:  {}", num_samples)
-    println!("Timing:  {}", timing)
-
-    let start_ns = extra::time::precise_time_ns();
-
-    let (port, chan): (Port<~[Time]>, Chan<~[Time]>) = stream();
-    let chan = std::comm::SharedChan::new(chan);
-    for tid in range(0, num_tasks) {
-        let child_chan = chan.clone();
-        let child_timing = timing.clone();
-        do spawn || {
-            let mut samples = ~[];
-            let n = if tid == 0 {
-                // get the odd one left over
-                num_samples - (num_samples / num_tasks) * (num_tasks - 1)
-            } else {
-                num_samples / num_tasks
-            };
-            samples.reserve(n);
-            do n.times {
-                // TODO: may be better to reuse these timing policies.
-                let p = policies::make_timing_policy(child_timing);
-                let sample = simulate(num_servers, p);
-                samples.push(sample);
-            }
-            extra::sort::tim_sort(samples);
-            child_chan.send(samples);
-        }
-    }
-
-    let mut samples = ~[];
-    samples.reserve(num_samples);
-    do num_tasks.times {
-        samples.push_all(port.recv());
-    }
-    extra::sort::tim_sort(samples);
-
-    let end_ns = extra::time::precise_time_ns();
-    let elapsed_ns = end_ns - start_ns;
-
-    println!("Min:     {} ticks", samples[0]);
-    println!("Median:  {} ticks", samples[samples.len()/2]);
-    println!("Max:     {} ticks", samples[samples.len()-1]);
-    println!("Wall:    {:.2f} s",     elapsed_ns as f64 / 1e9);
-}
-
-fn simulate(num_servers: uint, timing_policy: ~TimingPolicy) -> Time {
-    let env = &mut Environment::new(timing_policy);
-    let mut cluster = Cluster::new(env, num_servers);
-    let mut end = None;
-    while end.is_none() {
-        env.clock = Time(*env.clock + 1);
-        for server in cluster.mut_iter() {
-            server.tick(env);
-        }
-        for msg in env.pop_ready_messages().move_iter() {
-            cluster.deliver(env, msg);
-        }
-        for server in cluster.iter() {
-            end = server.stable_leader_start_time();
-            if end.is_some() {
-                break;
-            }
-        }
-        /*
-        // useful for debugging:
-        println!("Tick: {}", env.clock);
-        for server in cluster.iter() {
-            println!("{}", *server);
-        }
-        for message in env.network.iter() {
-            println!("{}", **message);
-        }
-        println!("");
-        */
-    }
-    return end.unwrap();
 }
 
