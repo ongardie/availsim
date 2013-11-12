@@ -85,8 +85,13 @@ enum MessageBody {
         term: Term,
         granted: bool,
     },
-    Heartbeat {
+    AppendEntriesRequest {
         term: Term,
+        seqno: uint,
+    },
+    AppendEntriesResponse {
+        term: Term,
+        seqno: uint,
     },
 }
 
@@ -108,9 +113,12 @@ impl fmt::Default for MessageBody {
             RequestVoteResponse{term, granted} =>
                 write!(f.buf, "RequestVoteResponse({}, {})",
                        term, granted),
-            Heartbeat{term} =>
-                write!(f.buf, "Heartbeat({})",
-                       term),
+            AppendEntriesRequest{term, seqno} =>
+                write!(f.buf, "AppendEntriesRequest({}, {})",
+                       term, seqno),
+            AppendEntriesResponse{term, seqno} =>
+                write!(f.buf, "AppendEntriesResponse({}, {})",
+                       term, seqno),
         }
     }
 }
@@ -120,7 +128,7 @@ impl fmt::Default for MessageBody {
 enum ServerState {
     Follower  { timer: Time },
     Candidate { timer: Time, votes: uint },
-    Leader,
+    Leader    { timer: Time, heartbeat_seqno: uint,  acks: uint},
 }
 
 impl fmt::Default for Time {
@@ -146,7 +154,7 @@ impl fmt::Default for ServerState {
         match *state {
             Follower{timer} => write!(f.buf, "Follower({})", timer),
             Candidate{timer, votes} => write!(f.buf, "Candidate({}, {})", timer, votes),
-            Leader => write!(f.buf, "Leader"),
+            Leader{timer, heartbeat_seqno, acks} => write!(f.buf, "Leader({}, {}, {})", timer, heartbeat_seqno, acks),
         }
     }
 }
@@ -198,6 +206,7 @@ impl Server {
     }
     */
     fn tick(&mut self, env: &mut Environment) {
+        let mut need_step_down = false;
         match self.state {
             Follower  {timer, _} |
             Candidate {timer, _} => {
@@ -216,7 +225,23 @@ impl Server {
                 }
                 self.try_become_leader(env);
             },
-            Leader => {},
+            Leader {timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks} => {
+                if timer <= env.clock {
+                    if (*acks > (self.peers.len() + 1) / 2) {
+                        *heartbeat_seqno += 1;
+                        *acks = 0;
+                        env.multicast(self.id, self.peers, &AppendEntriesRequest {
+                            term: self.term,
+                            seqno: *heartbeat_seqno,
+                        });
+                    } else {
+                        need_step_down = true;
+                    }
+                }
+            },
+        }
+        if need_step_down {
+            self.step_down(env, self.term)
         }
     }
     fn step_down(&mut self, env: &Environment, term: Term) {
@@ -232,13 +257,18 @@ impl Server {
             Follower {_} => {},
             Candidate {votes, _} => {
                 if votes > (self.peers.len() + 1) / 2 {
-                    self.state = Leader;
-                    env.multicast(self.id, self.peers, &Heartbeat {
+                    self.state = Leader {
+                        timer: env.make_time(75, 76),
+                        heartbeat_seqno: 0,
+                        acks: 1,
+                    };
+                    env.multicast(self.id, self.peers, &AppendEntriesRequest {
                         term: self.term,
+                        seqno: 0,
                     });
                 }
             },
-            Leader => {},
+            Leader {_} => {},
         }
     }
     fn handle(&mut self, env: &mut Environment, msg: &Message) {
@@ -274,20 +304,36 @@ impl Server {
                         Candidate {votes: ref mut votes, _} => {
                             *votes += 1;
                         },
-                        Leader => {},
+                        Leader {_} => {},
                     }
                     self.try_become_leader(env)
                 } else if term > self.term {
                     self.step_down(env, term);
                 }
             },
-            Heartbeat {term} => {
+            AppendEntriesRequest {term, seqno} => {
                 if term == self.term {
                     self.state = Follower {
                         timer: env.make_time(150, 300),
                     };
                 } else if term > self.term {
                     self.step_down(env, term);
+                }
+                env.reply(msg, &AppendEntriesResponse {
+                    term: self.term,
+                    seqno: seqno,
+                });
+            },
+            AppendEntriesResponse {term, seqno} => {
+                if term == self.term {
+                    match self.state {
+                        Follower {_} | Candidate {_} => {},
+                        Leader { heartbeat_seqno, acks: ref mut acks, _ } => {
+                            if seqno == heartbeat_seqno {
+                                *acks += 1;
+                            }
+                        },
+                    }
                 }
             },
         }
@@ -385,7 +431,6 @@ fn main() {
         for message in env.network.iter() {
             println!("{}", **message);
         }
-        println("");
     }
 }
 
