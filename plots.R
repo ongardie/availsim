@@ -38,5 +38,5 @@ g$cdf <- ggplot(run) +
        ggtitle(title)
 
 ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1),
-        filename='Rplots.pdf',
+        filename='Rplots.svg',
         width=7, height=3.5)

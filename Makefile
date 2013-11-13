@@ -14,3 +14,36 @@ prof: debug
 
 plot:
 	Rscript plots.R
+
+data/%/meta.csv data/%/samples.csv data/%/args.txt:
+	( \
+	cd $$(dirname $@); \
+	pwd; \
+	touch -a args.txt; \
+	../../main --servers=5 $$(cat args.txt); \
+	)
+
+.PRECIOUS: data/%/meta.csv
+.PRECIOUS: data/%/samples.csv
+
+data/%/Rplots.svg: data/%/meta.csv data/%/samples.csv
+	( \
+	cd $$(dirname $@); \
+	pwd; \
+	Rscript ../../plots.R; \
+	)
+
+timings=$(patsubst data/%/args.txt, %, $(wildcard data/*/args.txt))
+
+index.html:
+	echo > index.html
+	for t in $(timings); do \
+		echo '<img src="data/'$$t'/Rplots.svg" style="border: 1px solid black;" />' >> index.html; \
+	done
+
+plots: index.html $(addprefix data/, $(addsuffix /Rplots.svg, $(timings)))
+
+# The following target is useful for debugging Makefiles; it
+# prints the value of a make variable.
+print-%:
+	@echo $* = $($*)
