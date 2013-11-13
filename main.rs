@@ -1,5 +1,6 @@
 #[feature(globs)];
 #[feature(struct_variant)];
+#[feature(macro_rules)];
 extern mod std;
 extern mod extra;
 use extra::getopts;

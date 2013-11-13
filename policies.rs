@@ -1,4 +1,5 @@
 #[feature(globs)];
+#[feature(macro_rules)];
 use basics::*;
 use std::hashmap::HashSet;
 
@@ -8,18 +9,16 @@ pub trait TimingPolicy {
     fn network_latency(&self, from: ServerID, to: ServerID) -> uint;
 }
 
-struct Uniform {
-    latency_range : (uint, uint),
-}
+struct Uniform(uint, uint);
 impl TimingPolicy for Uniform {
     fn network_latency(&self, _from: ServerID, _to: ServerID) -> uint {
-        match self.latency_range {
-          (min, max) => randrange(min, max)
+        match *self {
+          Uniform(min, max) => randrange(min, max)
         }
     }
 }
 
-struct Partitioned(~[Partition]);
+struct Partitions(~[Partition]);
 
 struct Partition {
     servers: HashSet<ServerID>,
@@ -33,15 +32,9 @@ impl Partition {
             timing: timing,
         }
     }
-    fn newInt(ids: &[uint], timing: ~TimingPolicy) -> Partition {
-        Partition {
-            servers: newHashSet(ids.map(|id| ServerID(*id))),
-            timing: timing,
-        }
-    }
 }
 
-impl TimingPolicy for Partitioned {
+impl TimingPolicy for Partitions {
     fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
         for partition in self.iter() {
             if partition.servers.contains(&from) &&
@@ -60,13 +53,22 @@ struct Link {
     to: ServerID,
     timing: ~TimingPolicy,
 }
+macro_rules! link(
+    ($name:expr: $from:expr -> $to:expr) => (
+        Link {
+            from: ServerID($from),
+            to: ServerID($to),
+            timing: make(stringify!($name))
+        }
+    );
+)
 
-struct BadLinks {
+struct Links {
     links: ~[Link],
     other: ~TimingPolicy,
 }
 
-impl TimingPolicy for BadLinks {
+impl TimingPolicy for Links {
     fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
         for link in self.links.iter() {
             if link.from == from && link.to == to {
@@ -85,34 +87,35 @@ fn newHashSet<T: Clone + IterBytes + Hash + Eq>(elements: &[T]) -> HashSet<T> {
     return set;
 }
 
+macro_rules! partition(
+    ($name:expr: $($id:expr) +) => (
+        Partition::new([$(ServerID($id),)+], make(stringify!($name)))
+    );
+)
 
 pub fn make(name: &str) -> ~TimingPolicy {
     return match name {
-        "Down" => ~Uniform {
-                    latency_range: (NEVER, NEVER),
-        } as ~TimingPolicy,
-        "LAN" => ~Uniform {
-                    latency_range: (2, 5),
-        } as ~TimingPolicy,
-        "WAN" => ~Uniform {
-                    latency_range: (30, 70),
-        } as ~TimingPolicy,
-        "P1" => ~Partitioned(~[
-                    Partition::newInt([1],          make("Down")),
-                    Partition::newInt([2, 3, 4, 5], make("LAN")),
+        "Down" => ~Uniform(NEVER, NEVER)
+        as ~TimingPolicy,
+        "LAN" => ~Uniform(2, 5)
+        as ~TimingPolicy,
+        "WAN" => ~Uniform(30, 70)
+        as ~TimingPolicy,
+        "P1" => ~Partitions(~[
+                    partition!(Down: 1),
+                    partition!(LAN:  2 3 4 5),
         ]) as ~TimingPolicy,
-        "P2" => ~Partitioned(~[
-                    Partition::newInt([1, 2],       make("Down")),
-                    Partition::newInt([3, 4, 5],    make("LAN")),
+        "P2" => ~Partitions(~[
+                    partition!(Down: 1 2),
+                    partition!(LAN:  3 4 5),
         ]) as ~TimingPolicy,
-        "L1" => ~BadLinks {
-            links: ~[Link{ from: ServerID(1), to: ServerID(2),
-                           timing: make("WAN") }],
+        "L1" => ~Links {
+            links: ~[link!(WAN: 1 -> 2)],
             other: make("LAN"),
         } as ~TimingPolicy,
-        "Deian" => ~Partitioned(~[
-                    Partition::newInt([1,2,3,4],   make("LAN")),
-                    Partition::newInt([1,2,3,4,5], make("WAN")),
+        "Deian" => ~Partitions(~[
+                    partition!(LAN: 1 2 3 4),
+                    partition!(WAN: 1 2 3 4 5),
         ]) as ~TimingPolicy,
         _ => fail!("Unknown timing policy name: {}", name),
     }
