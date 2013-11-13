@@ -149,6 +149,8 @@ impl Server {
                             seqno: *heartbeat_seqno,
                         });
                     } else {
+                        // TODO: this is probably too agressive, should only
+                        // step down after election timeout
                         need_step_down = true;
                     }
                 }
