@@ -1,5 +1,8 @@
 #[feature(globs)];
 #[feature(macro_rules)];
+
+extern mod std;
+
 use basics::*;
 use std::hashmap::HashSet;
 
@@ -14,6 +17,24 @@ impl TimingPolicy for Uniform {
     fn network_latency(&self, _from: ServerID, _to: ServerID) -> uint {
         match *self {
           Uniform(min, max) => randrange(min, max)
+        }
+    }
+}
+
+struct Stochastic {
+    afrac: f64,
+    a: ~TimingPolicy,
+    b: ~TimingPolicy,
+}
+impl TimingPolicy for Stochastic {
+    fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
+        use std::rand::distributions::{IndependentSample, Range};
+        let range = Range::new(0.0, 1.0);
+        let sample = range.ind_sample(std::rand::task_rng());
+        if sample < self.afrac {
+            self.a.network_latency(from, to)
+        } else {
+            self.b.network_latency(from, to)
         }
     }
 }
@@ -95,6 +116,11 @@ macro_rules! partition(
 
 pub fn make(name: &str) -> ~TimingPolicy {
     return match name {
+        "Delay1pct" => ~Stochastic {
+            afrac: 0.99,
+            a: ~Uniform(2, 5) as ~TimingPolicy,
+            b: ~Uniform(5, 100) as ~TimingPolicy,
+        } as ~TimingPolicy,
         "Down" => ~Uniform(NEVER, NEVER)
         as ~TimingPolicy,
         "LAN" => ~Uniform(2, 5)
