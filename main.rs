@@ -6,6 +6,7 @@ extern mod extra;
 use extra::getopts;
 use basics::*;
 use policies::TimingPolicy;
+use std::rt::io::File;
 
 mod basics;
 mod policies;
@@ -78,6 +79,12 @@ fn main() {
         None => { ~"LAN" },
     };
 
+    let mut meta : ~[(~str, ~str)] = ~[];
+    meta.push((~"servers", format!("{}", num_servers)));
+    meta.push((~"tasks",   format!("{}", num_tasks)));
+    meta.push((~"trials",  format!("{}", num_samples)));
+    meta.push((~"timing",  timing.clone()));
+
     println!("Servers: {}", num_servers)
     println!("Tasks:   {}", num_tasks)
     println!("Trials:  {}", num_samples)
@@ -115,11 +122,28 @@ fn main() {
 
     let end_ns = extra::time::precise_time_ns();
     let elapsed_ns = end_ns - start_ns;
+    meta.push((~"wall",  format!("{}", elapsed_ns as f64 / 1e9)));
 
     println!("Min:     {} ticks", samples[0]);
     println!("Median:  {} ticks", samples[samples.len()/2]);
     println!("Max:     {} ticks", samples[samples.len()-1]);
     println!("Wall:    {:.2f} s",     elapsed_ns as f64 / 1e9);
+
+    let metaf = &mut File::create(&Path::new("meta.csv")).unwrap() as &mut Writer;
+    for &(ref k, ref _v) in meta.iter() {
+        write!(metaf, "{}, ", *k);
+    }
+    write!(metaf, "\n");
+    for &(ref _k, ref v) in meta.iter() {
+        write!(metaf, "{}, ", *v);
+    }
+    write!(metaf, "\n");
+
+    let runf = &mut File::create(&Path::new("samples.csv")).unwrap() as &mut Writer;
+    writeln!(runf, "election_time");
+    for sample in samples.iter() {
+        writeln!(runf, "{}", *sample);
+    }
 }
 
 fn run_task(n: uint, num_servers: uint, timing: &str) -> ~[Time] {
