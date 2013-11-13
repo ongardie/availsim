@@ -1,6 +1,6 @@
 RUSTC = time -p rustc
 all:
-	@echo "make debug|opt|prof"
+	@echo "make debug|opt|prof|plots|clean"
 	exit 1
 
 debug:
@@ -15,7 +15,7 @@ prof: debug
 plot:
 	Rscript plots.R
 
-data/%/meta.csv data/%/samples.csv data/%/args.txt:
+data/%/meta.csv data/%/samples.csv: data/%/args.txt
 	( \
 	cd $$(dirname $@); \
 	pwd; \
@@ -42,6 +42,13 @@ index.html:
 	done
 
 plots: index.html $(addprefix data/, $(addsuffix /Rplots.svg, $(timings)))
+
+clean:
+	rm -f data/*/*.svg
+	rm -f data/*/*.csv
+	rm -f index.html
+	rm -f main
+
 
 # The following target is useful for debugging Makefiles; it
 # prints the value of a make variable.

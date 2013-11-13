@@ -1,2 +1,1 @@
---timing BadRecv
---samples 10000
+--timing BadRecv --samples 1000
