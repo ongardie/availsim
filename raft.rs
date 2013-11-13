@@ -142,7 +142,7 @@ impl Server {
                 if *timer <= env.clock {
                     if (*acks > (self.peers.len() + 1) / 2) {
                         *heartbeat_seqno += 1;
-                        *acks = 0;
+                        *acks = 1;
                         *timer = env.make_time(75, 75);
                         env.multicast(self.id, self.peers, &AppendEntriesRequest {
                             term: self.term,

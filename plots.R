@@ -1,4 +1,5 @@
 require("ggplot2")
+require("gridExtra")
 require("scales")
 meta = read.csv('meta.csv')
 run = read.csv('samples.csv')
@@ -14,17 +15,28 @@ reverselog_trans <- function(base = exp(1)) {
               domain = c(1e-99, Inf))
 }
 
-johncdf_yscale = scale_y_continuous(
-                    breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
-                    trans=reverselog_trans(10))
+title <- with(meta,
+            sprintf('%s / %d servers / %s trials',
+                    timing, servers, format(trials, big.mark=',')))
 
-print(ggplot(run) +
+g <- {}
+
+g$johncdf <- ggplot(run) +
        stat_ecdf(aes(x=election_time)) +
-       johncdf_yscale +
+       scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
+                          trans=reverselog_trans(10)) +
        expand_limits(x=c(0, 1000)) +
-       #coord_cartesian(x=c(0, 1000)) +
        xlab('Election Time') +
        ylab('Cumulative Fraction') +
-       ggtitle(with(meta,
-            sprintf('%s / %d servers / %s trials',
-                    timing, servers, format(trials, big.mark=',')))))
+       ggtitle(title)
+
+g$cdf <- ggplot(run) +
+       stat_ecdf(aes(x=election_time)) +
+       coord_cartesian(x=c(0, 1000)) +
+       xlab('Election Time') +
+       ylab('Cumulative Fraction') +
+       ggtitle(title)
+
+ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1),
+        filename='Rplots.pdf',
+        width=7, height=3.5)
