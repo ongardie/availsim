@@ -18,6 +18,7 @@ fn main() {
     let opts = [
         getopts::optflag("h"),
         getopts::optflag("help"),
+        getopts::optopt("logs"),
         getopts::optopt("samples"),
         getopts::optopt("servers"),
         getopts::optopt("tasks"),
@@ -30,11 +31,12 @@ fn main() {
     let usage = || {
         println!("Usage: {} [options]", args[0]);
         println!("-h, --help       Print this help message");
+        println!("--logs=POLICY    Log length policy (default same)");
         println!("--samples=N      Number of simulations (default 10,000)");
         println!("--servers=N      Simulate cluster with N servers");
         println!("--tasks=N        Number of parallel jobs (default {})",
                  std::rt::default_sched_threads() - 1);
-        println!("--timing=POLICY  Number of timing policy (default LAN)");
+        println!("--timing=POLICY  Network timing policy (default LAN)");
     };
     if matches.opt_present("h") || matches.opt_present("help") {
         usage();
@@ -44,6 +46,10 @@ fn main() {
         usage();
         fail!(format!("Extra arguments: {}", matches.free.len()));
     }
+    let log_length : ~str = match matches.opt_str("logs") {
+        Some(s) => { s },
+        None => { ~"same" },
+    };
     let num_samples : uint = match matches.opt_str("samples") {
         Some(s) => { match std::from_str::from_str(s) {
             Some(i) => { i },
@@ -80,25 +86,28 @@ fn main() {
     };
 
     let mut meta : ~[(~str, ~str)] = ~[];
-    meta.push((~"servers", format!("{}", num_servers)));
-    meta.push((~"tasks",   format!("{}", num_tasks)));
-    meta.push((~"trials",  format!("{}", num_samples)));
-    meta.push((~"timing",  timing.clone()));
+    meta.push((~"log_length", log_length.clone()));
+    meta.push((~"servers",    format!("{}", num_servers)));
+    meta.push((~"tasks",      format!("{}", num_tasks)));
+    meta.push((~"trials",     format!("{}", num_samples)));
+    meta.push((~"timing",     timing.clone()));
 
-    println!("Servers: {}", num_servers)
-    println!("Tasks:   {}", num_tasks)
-    println!("Trials:  {}", num_samples)
-    println!("Timing:  {}", timing)
+    println!("Log length: {}", log_length)
+    println!("Servers:    {}", num_servers)
+    println!("Tasks:      {}", num_tasks)
+    println!("Trials:     {}", num_samples)
+    println!("Timing:     {}", timing)
 
     let start_ns = extra::time::precise_time_ns();
 
     let samples = if num_tasks <= 1 {
-        run_task(num_samples, num_servers, timing)
+        run_task(num_samples, num_servers, timing, log_length)
     } else {
         let (port, chan): (Port<~[Time]>, Chan<~[Time]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
         for tid in range(0, num_tasks) {
             let child_chan = chan.clone();
+            let child_log_length = log_length.clone();
             let child_timing = timing.clone();
             do spawn || {
                 let n = if tid == 0 {
@@ -107,7 +116,7 @@ fn main() {
                 } else {
                     num_samples / num_tasks
                 };
-                child_chan.send(run_task(n, num_servers, child_timing));
+                child_chan.send(run_task(n, num_servers, child_timing, child_log_length));
             }
         }
 
@@ -146,13 +155,13 @@ fn main() {
     }
 }
 
-fn run_task(n: uint, num_servers: uint, timing: &str) -> ~[Time] {
+fn run_task(n: uint, num_servers: uint, timing: &str, log_length: &str) -> ~[Time] {
     let mut samples = ~[];
     samples.reserve(n);
     do n.times {
         // TODO: may be better to reuse these timing policies.
         let p = policies::make(timing);
-        let sample = sim::simulate(num_servers, p);
+        let sample = sim::simulate(num_servers, p, log_length);
         samples.push(sample);
     }
     extra::sort::tim_sort(samples);

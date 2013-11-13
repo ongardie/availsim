@@ -123,7 +123,7 @@ impl Server {
                     };
                     env.multicast(self.id, self.peers, &RequestVoteRequest {
                         term: self.term,
-                        lastLogIndex: Index(0),
+                        lastLogIndex: self.lastLogIndex,
                     });
                 }
                 self.try_become_leader(env);
@@ -206,7 +206,7 @@ impl Server {
                     }
                     match self.vote {
                         None => {
-                            if self.lastLogIndex <= lastLogIndex {
+                            if lastLogIndex >= self.lastLogIndex {
                                 self.vote = Some(msg.from);
                                 reply(true);
                             } else {

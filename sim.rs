@@ -80,14 +80,34 @@ impl Cluster {
         return Cluster(servers);
     }
 
+    fn set_log_lengths(&mut self, policy: &str) {
+        match policy {
+            "same" => for server in self.mut_iter() {
+                server.lastLogIndex = Index(0);
+            },
+            "diff" => {
+                use std::rand::Rng;
+                let mut lengths = range(0, self.len()).to_owned_vec();
+                std::rand::task_rng().shuffle_mut(lengths);
+                for (server, length) in self.mut_iter().zip(lengths.iter()) {
+                    server.lastLogIndex = Index(*length);
+                }
+            },
+            _ => fail!("Unknown log length policy: {}", policy)
+        }
+    }
+
     fn deliver(&mut self, env: &mut Environment, msg: &Message) {
         self[*msg.to - 1].handle(env, msg);
     }
 }
 
-pub fn simulate(num_servers: uint, timing_policy: ~TimingPolicy) -> Time {
+pub fn simulate(num_servers: uint,
+                timing_policy: ~TimingPolicy,
+                log_lengths: &str) -> Time {
     let env = &mut Environment::new(timing_policy);
     let mut cluster = Cluster::new(env, num_servers);
+    cluster.set_log_lengths(log_lengths);
     let mut end = None;
     let mut ready_msgs = ~[]; // declared out here to avoid mallocs
     while end.is_none() {
