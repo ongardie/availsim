@@ -21,7 +21,6 @@ impl fmt::Default for Message {
 pub enum MessageBody {
     RequestVoteRequest {
         term: Term,
-        lastLogTerm: Term,
         lastLogIndex: Index,
     },
     RequestVoteResponse {
@@ -41,9 +40,9 @@ pub enum MessageBody {
 impl fmt::Default for MessageBody {
     fn fmt(b: &MessageBody, f: &mut fmt::Formatter) {
         match *b {
-            RequestVoteRequest{term, lastLogTerm, lastLogIndex} =>
-                write!(f.buf, "RequestVoteRequest(term: {}, lastLogTerm: {}, lastLogIndex: {})",
-                       term, lastLogTerm, lastLogIndex),
+            RequestVoteRequest{term, lastLogIndex} =>
+                write!(f.buf, "RequestVoteRequest(term: {}, lastLogIndex: {})",
+                       term, lastLogIndex),
             RequestVoteResponse{term, granted} =>
                 write!(f.buf, "RequestVoteResponse(term: {}, granted: {})",
                        term, granted),
@@ -90,21 +89,13 @@ struct LogEntry {
     // command: ~str,
 }
 
-struct Log(~[LogEntry]);
-
-impl Log {
-    fn new() -> Log {
-        Log(~[])
-    }
-}
-
 struct Server {
     id: ServerID,
     peers: ~[ServerID],
     term: Term,
     state: ServerState,
     vote: Option<ServerID>,
-    log: Log,
+    lastLogIndex: Index,
 }
 
 impl Server {
@@ -114,7 +105,7 @@ impl Server {
             peers: peers,
             term: Term(0),
             state: Follower { timer: env.make_time(150, 299) },
-            log: Log::new(),
+            lastLogIndex: Index(0),
             vote: None,
         }
     }
@@ -132,7 +123,6 @@ impl Server {
                     };
                     env.multicast(self.id, self.peers, &RequestVoteRequest {
                         term: self.term,
-                        lastLogTerm: Term(0),
                         lastLogIndex: Index(0),
                     });
                 }
@@ -201,7 +191,7 @@ impl Server {
 
     pub fn handle(&mut self, env: &mut Environment, msg: &Message) {
         match msg.body {
-            RequestVoteRequest {term, _} => {
+            RequestVoteRequest {term, lastLogIndex} => {
                 let reply = |granted| {
                     env.reply(msg, &RequestVoteResponse {
                         term: self.term,
@@ -216,8 +206,12 @@ impl Server {
                     }
                     match self.vote {
                         None => {
-                            self.vote = Some(msg.from);
-                            reply(true);
+                            if self.lastLogIndex <= lastLogIndex {
+                                self.vote = Some(msg.from);
+                                reply(true);
+                            } else {
+                                reply(false);
+                            }
                         },
                         Some(c) => {
                             reply(c == msg.from);
