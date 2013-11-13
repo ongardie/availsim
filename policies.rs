@@ -117,6 +117,15 @@ pub fn make(name: &str) -> ~TimingPolicy {
                     partition!(LAN: 1 2 3 4),
                     partition!(WAN: 1 2 3 4 5),
         ]) as ~TimingPolicy,
+        "BadRecv" => ~Links {
+            links: ~[
+                link!(Down: 2 -> 1),
+                link!(Down: 3 -> 1),
+                link!(Down: 4 -> 1),
+                link!(Down: 5 -> 1),
+            ],
+            other: make("LAN"),
+        } as ~TimingPolicy,
         _ => fail!("Unknown timing policy name: {}", name),
     }
 }
