@@ -15,13 +15,20 @@ reverselog_trans <- function(base = exp(1)) {
               domain = c(1e-99, Inf))
 }
 
+gtheme <- theme_bw(base_size = 12, base_family = "") +
+          theme(plot.margin=unit(c(.2,0,0,0), 'cm'),
+                legend.margin=unit(0, 'cm'),
+                axis.title=element_text(size = rel(.8)),
+                plot.title=element_text(size = rel(.8)))
+
 title <- with(meta,
-            sprintf('%s / %d servers / %s trials',
-                    timing, servers, format(trials, big.mark=',')))
+            sprintf('%s / logs %s / %d servers / %s trials',
+                    timing, log_length, servers,
+                    format(trials, big.mark=',')))
 
 g <- {}
 
-g$johncdf <- ggplot(run) +
+g$johncdf <- ggplot(run) + gtheme +
        stat_ecdf(aes(x=election_time)) +
        scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
                           trans=reverselog_trans(10)) +
@@ -30,7 +37,7 @@ g$johncdf <- ggplot(run) +
        ylab('Cumulative Fraction') +
        ggtitle(title)
 
-g$cdf <- ggplot(run) +
+g$cdf <- ggplot(run) + gtheme +
        stat_ecdf(aes(x=election_time)) +
        coord_cartesian(x=c(0, 1000)) +
        xlab('Election Time') +
