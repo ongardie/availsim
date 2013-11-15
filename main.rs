@@ -6,12 +6,35 @@ extern mod extra;
 use extra::getopts;
 use basics::*;
 use policies::TimingPolicy;
-use std::rt::io::File;
+use std::io::File;
+use std::rt::shouldnt_be_public::SelectInner;
+use std::select::Select;
 
 mod basics;
 mod policies;
 mod raft;
 mod sim;
+
+struct SelectBox<'self> {
+    inner: &'self mut std::select::Select,
+}
+
+impl<'self> SelectInner for SelectBox<'self> {
+    fn optimistic_check(&mut self) -> bool {
+        self.inner.optimistic_check()
+    }
+    // Returns true if data was available. If so, shall also wake() the task.
+    fn block_on(&mut self, sched: &mut std::rt::sched::Scheduler, task: std::rt::BlockedTask) -> bool {
+        self.inner.block_on(sched, task)
+    }
+    // Returns true if data was available.
+    fn unblock_from(&mut self) -> bool {
+        self.inner.unblock_from()
+    }
+}
+
+impl<'self> std::select::Select for SelectBox<'self> {
+}
 
 fn main() {
     let args = std::os::args();
@@ -100,10 +123,14 @@ fn main() {
 
     let start_ns = extra::time::precise_time_ns();
 
+    let mut signals = std::io::signal::Listener::new();
+    signals.register(std::io::signal::Interrupt);
+
     let samples = if num_tasks <= 1 {
         run_task(num_samples, num_servers, timing, log_length)
+        // TODO: ctrl-c?
     } else {
-        let (port, chan): (Port<~[Time]>, Chan<~[Time]>) = stream();
+        let (mut port, chan): (std::comm::Port<~[Time]>, std::comm::Chan<~[Time]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
         for tid in range(0, num_tasks) {
             let child_chan = chan.clone();
@@ -122,9 +149,30 @@ fn main() {
 
         let mut samples = ~[];
         samples.reserve(num_samples);
-        do num_tasks.times {
-            samples.push_all(port.recv());
+        let mut tasks_outstanding = num_tasks;
+        while tasks_outstanding > 0 {
+            //let (p1, c1): (std::rt::comm::Port<std::rt::io::signal::Signum>, std::rt::comm::Chan<std::rt::io::signal::Signum>) = std::rt::comm::stream();
+            //let (p2, c2): (std::rt::comm::Port<~[uint]>, std::rt::comm::Chan<~[uint]>) = std::rt::comm::stream();
+            //match std::select::select([p1 as &Select, p2 as &Select]) {
+            match std::select::select([SelectBox{ inner: &mut signals.port.x as &mut std::select::Select }, SelectBox{ inner: &mut port.x as &mut std::select::Select }]) {
+                0 => match signals.port.recv() {
+                    std::io::signal::Interrupt => {
+                        println!("Should exit now");
+                    },
+                    _ => fail!("Unexpected signal"),
+                },
+                1 => {
+                    println!("Task completed");
+                    tasks_outstanding -= 1;
+                    samples.push_all(port.recv());
+                },
+                _ => fail!("Unexpected return value from select")
+            }
         }
+        
+        //do num_tasks.times {
+        //    samples.push_all(port.recv());
+        //}
         extra::sort::tim_sort(samples);
         samples
     };
