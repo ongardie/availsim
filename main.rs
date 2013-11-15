@@ -36,6 +36,35 @@ impl<'self> SelectInner for SelectBox<'self> {
 impl<'self> std::select::Select for SelectBox<'self> {
 }
 
+macro_rules! selectmany_rec(
+    ($index:expr,
+     $port:expr => $action:expr,
+     $( $port_rest:expr => $action_rest:expr ),+) => (
+        if $index == 0 {
+            $action
+        } else {
+            $index -= 1;
+            selectmany_rec!($index, $( $port_rest => $action_rest ),*)
+        }
+    );
+    ($index:expr, $port:expr => $action:expr) => (
+        if $index == 0 {
+            $action
+        } else {
+            fail!("Bogus return value from select()");
+        }
+    );
+)
+
+macro_rules! selectmany(
+     ($( $port:expr => $action:expr ),+) => (
+        do 1.times {
+            let mut selectmany_i : uint = std::select::select([$( SelectBox{ inner: &mut $port as &mut std::select::Select } ),+]);
+            selectmany_rec!(selectmany_i, $( $port => $action ),+)
+        }
+    );
+)
+
 fn main() {
     let args = std::os::args();
     let opts = [
@@ -154,20 +183,23 @@ fn main() {
             //let (p1, c1): (std::rt::comm::Port<std::rt::io::signal::Signum>, std::rt::comm::Chan<std::rt::io::signal::Signum>) = std::rt::comm::stream();
             //let (p2, c2): (std::rt::comm::Port<~[uint]>, std::rt::comm::Chan<~[uint]>) = std::rt::comm::stream();
             //match std::select::select([p1 as &Select, p2 as &Select]) {
-            match std::select::select([SelectBox{ inner: &mut signals.port.x as &mut std::select::Select }, SelectBox{ inner: &mut port.x as &mut std::select::Select }]) {
-                0 => match signals.port.recv() {
-                    std::io::signal::Interrupt => {
-                        println!("Should exit now");
-                    },
-                    _ => fail!("Unexpected signal"),
+
+
+            selectmany!(
+                signals.port.x => {
+                    match signals.port.recv() {
+                        std::io::signal::Interrupt => {
+                            println!("Should exit now");
+                        },
+                        _ => fail!("Unexpected signal"),
+                    }
                 },
-                1 => {
+                port.x => {
                     println!("Task completed");
                     tasks_outstanding -= 1;
                     samples.push_all(port.recv());
-                },
-                _ => fail!("Unexpected return value from select")
-            }
+                }
+            )
         }
         
         //do num_tasks.times {
