@@ -7,27 +7,27 @@ use extra::getopts;
 use basics::*;
 use policies::TimingPolicy;
 use std::io::File;
-use std::rt::shouldnt_be_public::SelectInner;
-use std::select::Select;
 
 mod basics;
 mod policies;
 mod raft;
 mod sim;
 
+
+/* features to support selectmatch */
+
+/* SelectBox is a wrapper to allow calling select() on pointers */
 struct SelectBox<'self> {
     inner: &'self mut std::select::Select,
 }
 
-impl<'self> SelectInner for SelectBox<'self> {
+impl<'self> std::rt::shouldnt_be_public::SelectInner for SelectBox<'self> {
     fn optimistic_check(&mut self) -> bool {
         self.inner.optimistic_check()
     }
-    // Returns true if data was available. If so, shall also wake() the task.
     fn block_on(&mut self, sched: &mut std::rt::sched::Scheduler, task: std::rt::BlockedTask) -> bool {
         self.inner.block_on(sched, task)
     }
-    // Returns true if data was available.
     fn unblock_from(&mut self) -> bool {
         self.inner.unblock_from()
     }
@@ -36,7 +36,8 @@ impl<'self> SelectInner for SelectBox<'self> {
 impl<'self> std::select::Select for SelectBox<'self> {
 }
 
-macro_rules! selectmany_rec(
+/* recursive helper for selectmatch macro */
+macro_rules! selectmatch_rec(
     ($index:expr,
      $port:expr => $action:expr,
      $( $port_rest:expr => $action_rest:expr ),+) => (
@@ -44,7 +45,7 @@ macro_rules! selectmany_rec(
             $action
         } else {
             $index -= 1;
-            selectmany_rec!($index, $( $port_rest => $action_rest ),*)
+            selectmatch_rec!($index, $( $port_rest => $action_rest ),*)
         }
     );
     ($index:expr, $port:expr => $action:expr) => (
@@ -56,14 +57,18 @@ macro_rules! selectmany_rec(
     );
 )
 
-macro_rules! selectmany(
+/* bearable syntax for calling select with SelectBox */
+macro_rules! selectmatch(
      ($( $port:expr => $action:expr ),+) => (
         do 1.times {
-            let mut selectmany_i : uint = std::select::select([$( SelectBox{ inner: &mut $port as &mut std::select::Select } ),+]);
-            selectmany_rec!(selectmany_i, $( $port => $action ),+)
+            let mut selectmatch_i : uint = std::select::select([$( SelectBox{ inner: &mut $port as &mut std::select::Select } ),+]);
+            selectmatch_rec!(selectmatch_i, $( $port => $action ),+)
         }
     );
 )
+
+/* end selectmatch */
+
 
 fn main() {
     let args = std::os::args();
@@ -184,8 +189,7 @@ fn main() {
             //let (p2, c2): (std::rt::comm::Port<~[uint]>, std::rt::comm::Chan<~[uint]>) = std::rt::comm::stream();
             //match std::select::select([p1 as &Select, p2 as &Select]) {
 
-
-            selectmany!(
+            selectmatch!(
                 signals.port.x => {
                     match signals.port.recv() {
                         std::io::signal::Interrupt => {
