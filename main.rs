@@ -60,7 +60,7 @@ macro_rules! selectmatch_rec(
 /* bearable syntax for calling select with SelectBox */
 macro_rules! selectmatch(
      ($( $port:expr => $action:expr ),+) => (
-        do 1.times {
+        {
             let mut selectmatch_i : uint = std::select::select([$( SelectBox{ inner: &mut $port as &mut std::select::Select } ),+]);
             selectmatch_rec!(selectmatch_i, $( $port => $action ),+)
         }
@@ -79,6 +79,7 @@ fn main() {
         getopts::optopt("samples"),
         getopts::optopt("servers"),
         getopts::optopt("tasks"),
+        getopts::optopt("timeout"),
         getopts::optopt("timing"),
     ];
     let matches = match getopts::getopts(args.tail(), opts) {
@@ -93,6 +94,8 @@ fn main() {
         println!("--servers=N      Simulate cluster with N servers");
         println!("--tasks=N        Number of parallel jobs (default {})",
                  std::rt::default_sched_threads() - 1);
+        println!("--timeout=MS     Milliseconds after which to stop");
+        println!("                 (default 0 meaning infinity)");
         println!("--timing=POLICY  Network timing policy (default LAN)");
     };
     if matches.opt_present("h") || matches.opt_present("help") {
@@ -137,6 +140,21 @@ fn main() {
         }},
         None => { std::rt::default_sched_threads() - 1 },
     };
+    let timeout : uint = match matches.opt_str("timeout") {
+        Some(s) => { match std::from_str::from_str(s) {
+            Some(i) => { i },
+            None => {
+                usage();
+                fail!(format!("Couldn't parse timeout from '{}'", s));
+            },
+        }},
+        None => { 0 },
+    };
+    let timeout = if timeout == 0 {
+        !0
+    } else {
+        timeout
+    };
     let timing : ~str = match matches.opt_str("timing") {
         Some(s) => { s },
         None => { ~"LAN" },
@@ -147,11 +165,15 @@ fn main() {
     meta.push((~"servers",    format!("{}", num_servers)));
     meta.push((~"tasks",      format!("{}", num_tasks)));
     meta.push((~"timing",     timing.clone()));
+    meta.push((~"trials_req", format!("{}", num_samples)));
+    meta.push((~"timeout",    format!("{}", timeout)));
 
     println!("Log length: {}", log_length)
     println!("Servers:    {}", num_servers)
     println!("Tasks:      {}", num_tasks)
     println!("Timing:     {}", timing)
+    println!("Req. trials:{}", num_samples)
+    println!("Timeout:    {} ms", timeout)
 
     let start_ns = extra::time::precise_time_ns();
 
@@ -165,13 +187,18 @@ fn main() {
         let (mut port, chan): (std::comm::Port<~[Time]>, std::comm::Chan<~[Time]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
         let mut exit_chans : ~[std::comm::Chan<()>] = ~[];
+        let exit = || {
+            for c in exit_chans.iter() {
+                c.send(());
+            }
+        };
         for tid in range(0, num_tasks) {
             let (exit_port, exit_chan): (std::comm::Port<()>, std::comm::Chan<()>) = stream();
             exit_chans.push(exit_chan);
             let child_chan = chan.clone();
             let child_log_length = log_length.clone();
             let child_timing = timing.clone();
-            do spawn || {
+            do spawn {
                 let n = if tid == 0 {
                     // get the odd one left over
                     num_samples - (num_samples / num_tasks) * (num_tasks - 1)
@@ -185,17 +212,27 @@ fn main() {
         let mut samples = ~[];
         samples.reserve(num_samples);
         let mut tasks_outstanding = num_tasks;
+        let mut timeout_timer = std::io::timer::Timer::new().unwrap();
+        // simulate a one_shot timer with a periodic timer and a boolean, since
+        // I can't get the types to work otherwise
+        let mut timeout_port = timeout_timer.periodic(timeout as u64);
+        let mut timed_out = false;
         while tasks_outstanding > 0 {
             selectmatch!(
                 signals.port.x => {
                     match signals.port.recv() {
                         std::io::signal::Interrupt => {
                             println!("\nCtrl-C: exiting");
-                            for c in exit_chans.iter() {
-                                c.send(());
-                            }
                         },
                         _ => fail!("Unexpected signal"),
+                    }
+                },
+                timeout_port.x => {
+                    timeout_port.recv();
+                    if !timed_out {
+                        println!("Timeout");
+                        timed_out = true;
+                        exit();
                     }
                 },
                 port.x => {
