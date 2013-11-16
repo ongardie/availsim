@@ -146,13 +146,11 @@ fn main() {
     meta.push((~"log_length", log_length.clone()));
     meta.push((~"servers",    format!("{}", num_servers)));
     meta.push((~"tasks",      format!("{}", num_tasks)));
-    meta.push((~"trials",     format!("{}", num_samples)));
     meta.push((~"timing",     timing.clone()));
 
     println!("Log length: {}", log_length)
     println!("Servers:    {}", num_servers)
     println!("Tasks:      {}", num_tasks)
-    println!("Trials:     {}", num_samples)
     println!("Timing:     {}", timing)
 
     let start_ns = extra::time::precise_time_ns();
@@ -161,12 +159,15 @@ fn main() {
     signals.register(std::io::signal::Interrupt);
 
     let samples = if num_tasks <= 1 {
-        run_task(num_samples, num_servers, timing, log_length)
+        run_task(num_samples, num_servers, timing, log_length, &signals.port)
         // TODO: ctrl-c?
     } else {
         let (mut port, chan): (std::comm::Port<~[Time]>, std::comm::Chan<~[Time]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
+        let mut exit_chans : ~[std::comm::Chan<()>] = ~[];
         for tid in range(0, num_tasks) {
+            let (exit_port, exit_chan): (std::comm::Port<()>, std::comm::Chan<()>) = stream();
+            exit_chans.push(exit_chan);
             let child_chan = chan.clone();
             let child_log_length = log_length.clone();
             let child_timing = timing.clone();
@@ -177,7 +178,7 @@ fn main() {
                 } else {
                     num_samples / num_tasks
                 };
-                child_chan.send(run_task(n, num_servers, child_timing, child_log_length));
+                child_chan.send(run_task(n, num_servers, child_timing, child_log_length, &exit_port));
             }
         }
 
@@ -185,42 +186,41 @@ fn main() {
         samples.reserve(num_samples);
         let mut tasks_outstanding = num_tasks;
         while tasks_outstanding > 0 {
-            //let (p1, c1): (std::rt::comm::Port<std::rt::io::signal::Signum>, std::rt::comm::Chan<std::rt::io::signal::Signum>) = std::rt::comm::stream();
-            //let (p2, c2): (std::rt::comm::Port<~[uint]>, std::rt::comm::Chan<~[uint]>) = std::rt::comm::stream();
-            //match std::select::select([p1 as &Select, p2 as &Select]) {
-
             selectmatch!(
                 signals.port.x => {
                     match signals.port.recv() {
                         std::io::signal::Interrupt => {
-                            println!("Should exit now");
+                            println!("\nCtrl-C: exiting");
+                            for c in exit_chans.iter() {
+                                c.send(());
+                            }
                         },
                         _ => fail!("Unexpected signal"),
                     }
                 },
                 port.x => {
-                    println!("Task completed");
                     tasks_outstanding -= 1;
                     samples.push_all(port.recv());
                 }
             )
         }
-        
-        //do num_tasks.times {
-        //    samples.push_all(port.recv());
-        //}
         extra::sort::tim_sort(samples);
         samples
     };
 
     let end_ns = extra::time::precise_time_ns();
     let elapsed_ns = end_ns - start_ns;
-    meta.push((~"wall",  format!("{}", elapsed_ns as f64 / 1e9)));
+    meta.push((~"wall",   format!("{}", elapsed_ns as f64 / 1e9)));
+    meta.push((~"trials", format!("{}", samples.len())));
+    meta.push((~"min",    format!("{}", samples[0])));
+    meta.push((~"median", format!("{}", samples[samples.len()/2])));
+    meta.push((~"max",    format!("{}", samples[samples.len()-1])));
 
-    println!("Min:     {} ticks", samples[0]);
-    println!("Median:  {} ticks", samples[samples.len()/2]);
-    println!("Max:     {} ticks", samples[samples.len()-1]);
-    println!("Wall:    {:.2f} s",     elapsed_ns as f64 / 1e9);
+    println!("Trials:     {}",       samples.len());
+    println!("Min:        {} ticks", samples[0]);
+    println!("Median:     {} ticks", samples[samples.len()/2]);
+    println!("Max:        {} ticks", samples[samples.len()-1]);
+    println!("Wall:       {:.2f} s", elapsed_ns as f64 / 1e9);
 
     let metaf = &mut File::create(&Path::new("meta.csv")).unwrap() as &mut Writer;
     for &(ref k, ref _v) in meta.iter() {
@@ -239,10 +239,14 @@ fn main() {
     }
 }
 
-fn run_task(n: uint, num_servers: uint, timing: &str, log_length: &str) -> ~[Time] {
+fn run_task<T: Send>(n: uint, num_servers: uint, timing: &str, log_length: &str,
+               exit_port: &Port<T>) -> ~[Time] {
     let mut samples = ~[];
     samples.reserve(n);
-    do n.times {
+    for _ in range(0, n) {
+        if exit_port.peek() {
+            return samples;
+        }
         // TODO: may be better to reuse these timing policies.
         let p = policies::make(timing);
         let sample = sim::simulate(num_servers, p, log_length);
