@@ -69,6 +69,7 @@ fill('algorithm', $('#algorithm'), [
   'submission',
   'hesitant',
   'nograntnobump',
+  'zookeeper',
 ]);
 
 fill('terms', $('#terms'), [

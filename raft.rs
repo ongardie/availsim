@@ -44,6 +44,7 @@ pub enum MessageBody {
     RequestVoteResponse {
         term: Term,
         granted: VoteGranted,
+        logOk: bool,
     },
     AppendEntriesRequest {
         term: Term,
@@ -61,9 +62,9 @@ impl fmt::Default for MessageBody {
             RequestVoteRequest{term, lastLogIndex} =>
                 write!(f.buf, "RequestVoteRequest(term: {}, lastLogIndex: {})",
                        term, lastLogIndex),
-            RequestVoteResponse{term, granted} =>
-                write!(f.buf, "RequestVoteResponse(term: {}, granted: {})",
-                       term, granted),
+            RequestVoteResponse{term, granted, logOk} =>
+                write!(f.buf, "RequestVoteResponse(term: {}, granted: {}, logOk: {})",
+                       term, granted, logOk),
             AppendEntriesRequest{term, seqno} =>
                 write!(f.buf, "AppendEntriesRequest(term: {}, seqno: {})",
                        term, seqno),
@@ -78,7 +79,7 @@ impl fmt::Default for MessageBody {
 
 enum ServerState {
     Follower  { timer: Time },
-    Candidate { timer: Time, votes: uint, should_retry: bool },
+    Candidate { timer: Time, votes: uint, should_retry: bool, pre: bool },
     Leader    { timer: Time, heartbeat_seqno: uint, acks: uint, start_time: Time},
 }
 
@@ -90,9 +91,9 @@ impl fmt::Default for ServerState {
                 write!(f.buf, "Follower(timer: {})",
                        timer)
             },
-            Candidate{timer, votes, should_retry} => {
-                write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {})",
-                       timer, votes, should_retry)
+            Candidate{timer, votes, should_retry, pre} => {
+                write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {}, pre: {})",
+                       timer, votes, should_retry, pre)
             },
             Leader{timer, heartbeat_seqno, acks, start_time} => {
                 write!(f.buf, "Leader(timer: {}, seqno: {}, acks: {}, start_time: {})",
@@ -123,6 +124,7 @@ impl Server {
         match algorithm {
             "hesitant"      |
             "nograntnobump" |
+            "zookeeper"     |
             "submission"    => {},
             _ => fail!("Unknown algorithm: {}", algorithm)
         };
@@ -136,16 +138,23 @@ impl Server {
             vote: None,
         }
     }
-    fn start_new_election(&mut self, env: &mut Environment) {
-        self.term = Term(*self.term + 1);
-        self.vote = None;
+    fn start_new_election(&mut self, env: &mut Environment, force: bool) {
+        let pre = !force && match self.algorithm {
+            ~"zookeeper" => true,
+            _ => false,
+        };
+        if !pre {
+            self.term = Term(*self.term + 1);
+            self.vote = None;
+        }
         self.state = Candidate {
             timer: env.make_time(150, 299),
             votes: 1,
             should_retry: match self.algorithm {
                 ~"hesitant" => false,
                 _ => true,
-            }
+            },
+            pre: pre,
         };
         env.multicast(self.id, self.peers, &RequestVoteRequest {
             term: self.term,
@@ -159,12 +168,12 @@ impl Server {
         match self.state {
             Follower  {timer, _} => {
                 if timer <= env.clock {
-                    self.start_new_election(env)
+                    self.start_new_election(env, false)
                 }
             }
             Candidate {timer, should_retry, _} => {
                 if timer <= env.clock && should_retry {
-                    self.start_new_election(env)
+                    self.start_new_election(env, false)
                 }
             },
             Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, _} => {
@@ -201,8 +210,8 @@ impl Server {
     fn try_become_leader(&mut self, env: &mut Environment) {
         match self.state {
             Follower {_} => {},
-            Candidate {votes, _} => {
-                if votes > (self.peers.len() + 1) / 2 {
+            Candidate {votes, pre, _} => {
+                if !pre && votes > (self.peers.len() + 1) / 2 {
                     self.state = Leader {
                         timer: env.make_time(75, 75),
                         heartbeat_seqno: 0,
@@ -236,6 +245,7 @@ impl Server {
                         // use max here for nograntnobump algorithm
                         term: std::cmp::max(term, self.term),
                         granted: granted,
+                        logOk: lastLogIndex >= self.lastLogIndex,
                     });
                 };
                 if term < self.term {
@@ -264,24 +274,38 @@ impl Server {
                     }
                 }
             },
-            RequestVoteResponse {term, granted, _} => {
+            RequestVoteResponse {term, granted, logOk} => {
                 if term == self.term {
+                    let mut forceNewElection = false;
                     match self.state {
                         Follower {_} => {},
                         Candidate {votes: ref mut votes,
                                    should_retry: ref mut should_retry,
+                                   pre: ref mut pre,
                                    _} => {
-                            match granted {
-                                GRANTED => {
+                            if *pre {
+                                if logOk {
                                     *votes += 1;
-                                },
-                                TERM_STALE | VOTED => {
-                                    *should_retry = true;
-                                },
-                                LOG_STALE => {},
+                                    if *votes > (self.peers.len() + 1) / 2 {
+                                        forceNewElection = true;
+                                    }
+                                }
+                            } else {
+                                match granted {
+                                    GRANTED => {
+                                        *votes += 1;
+                                    },
+                                    TERM_STALE | VOTED => {
+                                        *should_retry = true;
+                                    },
+                                    LOG_STALE => {},
+                                }
                             }
                         },
                         Leader {_} => {},
+                    }
+                    if forceNewElection {
+                        self.start_new_election(env, true);
                     }
                     self.try_become_leader(env)
                 } else if term > self.term {
