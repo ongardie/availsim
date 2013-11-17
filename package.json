@@ -1,0 +1,9 @@
+{
+  "name": "explore",
+  "main": "explore.html"
+// ,
+//  "window": {
+//   "toolbar": false,
+//   "frame": false
+// }
+}

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script src="jquery-2.0.3.min.js"></script>
+<link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+<script src="bootstrap/js/bootstrap.min.js"></script>
+<script src="script.js"></script>
+<style>
+.mh50 {
+  min-height: 50px;
+}
+.m10 {
+  margin: 10px auto 10px auto;
+}
+</style>
+</head>
+<body>
+<div class="container" style="margin: 20px">
+
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3 class="panel-title">Simulate</h3>
+  </div>
+  <div class="panel-body">
+    <form id="form" role="form">
+
+      <div class="input-group input-group-lg" style="width:100%">
+        <input class="form-control" type="text" id="args" name="args" value="--timeout=200" />
+      </div>
+
+      <div class="m10">
+        <div id="logs" class="btn-group" data-toggle="buttons"></div>
+      </div>
+      <div class="m10">
+        <div id="timing" class="btn-group" data-toggle="buttons"></div>
+      </div>
+    </div>
+
+    </form>
+</div>
+
+
+
+<img id="graph" src="" />
+<input id="pin" type="button" value="Pin" />
+
+<div id="pinned"></div>
+
+</div>
+</body>
+</html>
