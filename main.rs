@@ -80,6 +80,7 @@ fn main() {
         getopts::optopt("samples"),
         getopts::optopt("servers"),
         getopts::optopt("tasks"),
+        getopts::optopt("terms"),
         getopts::optopt("timeout"),
         getopts::optopt("timing"),
     ];
@@ -96,6 +97,7 @@ fn main() {
         println!("--servers=N      Simulate cluster with N servers");
         println!("--tasks=N        Number of parallel jobs (default {})",
                  std::rt::default_sched_threads() - 1);
+        println!("--terms=POLICY   Initial terms policy (default same)");
         println!("--timeout=MS     Milliseconds after which to stop");
         println!("                 (default 0 meaning infinity)");
         println!("--timing=POLICY  Network timing policy (default LAN)");
@@ -146,6 +148,10 @@ fn main() {
         }},
         None => { std::rt::default_sched_threads() - 1 },
     };
+    let terms : ~str = match matches.opt_str("terms") {
+        Some(s) => { s },
+        None => { ~"same" },
+    };
     let timeout : uint = match matches.opt_str("timeout") {
         Some(s) => { match std::from_str::from_str(s) {
             Some(i) => { i },
@@ -171,6 +177,7 @@ fn main() {
     meta.push((~"log_length", log_length.clone()));
     meta.push((~"servers",    format!("{}", num_servers)));
     meta.push((~"tasks",      format!("{}", num_tasks)));
+    meta.push((~"terms",      terms.clone()));
     meta.push((~"timing",     timing.clone()));
     meta.push((~"trials_req", format!("{}", num_samples)));
     meta.push((~"timeout",    format!("{}", timeout)));
@@ -179,6 +186,7 @@ fn main() {
     println!("Log length: {}", log_length)
     println!("Servers:    {}", num_servers)
     println!("Tasks:      {}", num_tasks)
+    println!("Terms:      {}", terms)
     println!("Timing:     {}", timing)
     println!("Req. trials:{}", num_samples)
     println!("Timeout:    {} ms", timeout)
@@ -189,7 +197,7 @@ fn main() {
     signals.register(std::io::signal::Interrupt);
 
     let samples = if num_tasks <= 1 {
-        run_task(num_samples, num_servers, timing, log_length, algorithm, &signals.port)
+        run_task(num_samples, num_servers, timing, log_length, algorithm, terms, &signals.port)
     } else {
         let (mut port, chan): (std::comm::Port<~[Time]>, std::comm::Chan<~[Time]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
@@ -206,6 +214,7 @@ fn main() {
             let child_log_length = log_length.clone();
             let child_timing = timing.clone();
             let child_algorithm = algorithm.clone();
+            let child_terms = terms.clone();
             do spawn {
                 let n = if tid == 0 {
                     // get the odd one left over
@@ -213,7 +222,7 @@ fn main() {
                 } else {
                     num_samples / num_tasks
                 };
-                child_chan.send(run_task(n, num_servers, child_timing, child_log_length, child_algorithm, &exit_port));
+                child_chan.send(run_task(n, num_servers, child_timing, child_log_length, child_algorithm, child_terms, &exit_port));
             }
         }
 
@@ -289,6 +298,7 @@ fn run_task<T: Send>(n: uint,
                      timing: &str,
                      log_length: &str,
                      algorithm: &str,
+                     terms: &str,
                      exit_port: &Port<T>) -> ~[Time] {
     let mut samples = ~[];
     samples.reserve(n);
@@ -298,7 +308,7 @@ fn run_task<T: Send>(n: uint,
         }
         // TODO: may be better to reuse these timing policies.
         let p = policies::make(timing);
-        let sample = sim::simulate(num_servers, p, log_length, algorithm);
+        let sample = sim::simulate(num_servers, p, log_length, algorithm, terms);
         samples.push(sample);
     }
     extra::sort::tim_sort(samples);

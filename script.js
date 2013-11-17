@@ -70,6 +70,12 @@ fill('algorithm', $('#algorithm'), [
   'hesitant',
 ]);
 
+fill('terms', $('#terms'), [
+  'same',
+  'diff',
+]);
+
+
 var crypto = require('crypto');
 
 var form = $('#form');
@@ -95,6 +101,7 @@ var getArg = function(name) {
 form.submit(function() {
     var effargs = (args.val() +
                    getArg('logs') +
+                   getArg('terms') +
                    getArg('timing') +
                    getArg('algorithm'));
     console.log(effargs);

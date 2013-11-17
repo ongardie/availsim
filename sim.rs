@@ -97,6 +97,23 @@ impl Cluster {
         }
     }
 
+    fn set_terms(&mut self, policy: &str) {
+        match policy {
+            "same" => for server in self.mut_iter() {
+                server.term = Term(0);
+            },
+            "diff" => {
+                use std::rand::Rng;
+                let mut terms = range(0, self.len()).to_owned_vec();
+                std::rand::task_rng().shuffle_mut(terms);
+                for (server, term) in self.mut_iter().zip(terms.iter()) {
+                    server.term = Term(*term);
+                }
+            },
+            _ => fail!("Unknown term policy: {}", policy)
+        }
+    }
+
     fn deliver(&mut self, env: &mut Environment, msg: &Message) {
         self[*msg.to - 1].handle(env, msg);
     }
@@ -105,10 +122,12 @@ impl Cluster {
 pub fn simulate(num_servers: uint,
                 timing_policy: ~TimingPolicy,
                 log_lengths: &str,
-                algorithm: &str) -> Time {
+                algorithm: &str,
+                terms: &str) -> Time {
     let env = &mut Environment::new(timing_policy);
     let mut cluster = Cluster::new(env, num_servers, algorithm);
     cluster.set_log_lengths(log_lengths);
+    cluster.set_terms(terms);
     let mut end = None;
     let mut ready_msgs = ~[]; // declared out here to avoid mallocs
     while end.is_none() {
