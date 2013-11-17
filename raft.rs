@@ -18,6 +18,22 @@ impl fmt::Default for Message {
     }
 }
 
+#[deriving(Eq)]
+enum VoteGranted {
+    GRANTED,
+    TERM_STALE,
+    LOG_STALE,
+    VOTED,
+}
+
+impl fmt::Default for VoteGranted {
+    fn fmt(g: &VoteGranted, f: &mut fmt::Formatter) {
+        write!(f.buf, "{}",
+               *g);
+    }
+}
+
+
 pub enum MessageBody {
     RequestVoteRequest {
         term: Term,
@@ -25,7 +41,7 @@ pub enum MessageBody {
     },
     RequestVoteResponse {
         term: Term,
-        granted: bool,
+        granted: VoteGranted,
     },
     AppendEntriesRequest {
         term: Term,
@@ -202,7 +218,7 @@ impl Server {
                     });
                 };
                 if term < self.term {
-                    reply(false);
+                    reply(TERM_STALE);
                 } else {
                     if term > self.term {
                         self.step_down(env, term);
@@ -211,19 +227,19 @@ impl Server {
                         None => {
                             if lastLogIndex >= self.lastLogIndex {
                                 self.vote = Some(msg.from);
-                                reply(true);
+                                reply(GRANTED);
                             } else {
-                                reply(false);
+                                reply(LOG_STALE);
                             }
                         },
                         Some(c) => {
-                            reply(c == msg.from);
+                            reply(if c == msg.from { GRANTED } else { VOTED });
                         },
                     }
                 }
             },
             RequestVoteResponse {term, granted, _} => {
-                if term == self.term && granted {
+                if term == self.term && granted == GRANTED {
                     match self.state {
                         Follower {_} => {},
                         Candidate {votes: ref mut votes, _} => {
