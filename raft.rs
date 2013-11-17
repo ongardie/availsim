@@ -120,6 +120,12 @@ struct Server {
 impl Server {
     pub fn new(id : ServerID, peers: ~[ServerID], env: &Environment,
                algorithm: &str) -> Server {
+        match algorithm {
+            "hesitant"      |
+            "nograntnobump" |
+            "submission"    => {},
+            _ => fail!("Unknown algorithm: {}", algorithm)
+        };
         Server {
             id: id,
             peers: peers,
