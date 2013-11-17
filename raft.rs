@@ -1,4 +1,6 @@
 #[feature(globs)];
+extern mod std;
+
 use basics::*;
 use std::fmt;
 use sim::Environment;
@@ -225,14 +227,15 @@ impl Server {
             RequestVoteRequest {term, lastLogIndex} => {
                 let reply = |granted| {
                     env.reply(msg, &RequestVoteResponse {
-                        term: self.term,
+                        // use max here for nograntnobump algorithm
+                        term: std::cmp::max(term, self.term),
                         granted: granted,
                     });
                 };
                 if term < self.term {
                     reply(TERM_STALE);
                 } else {
-                    if term > self.term {
+                    if self.algorithm != ~"nograntnobump" && term > self.term {
                         self.step_down(env, term);
                     }
                     // careful ordering to support algorithm hesitant:
@@ -242,6 +245,9 @@ impl Server {
                     } else {
                         match self.vote {
                             None => {
+                                if self.algorithm == ~"nograntnobump" && term > self.term {
+                                    self.step_down(env, term);
+                                }
                                 self.vote = Some(msg.from);
                                 reply(GRANTED);
                             },

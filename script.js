@@ -68,6 +68,7 @@ fill('timing', $('#timing'), [
 fill('algorithm', $('#algorithm'), [
   'submission',
   'hesitant',
+  'nograntnobump',
 ]);
 
 fill('terms', $('#terms'), [
