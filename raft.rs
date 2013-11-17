@@ -76,7 +76,7 @@ impl fmt::Default for MessageBody {
 
 enum ServerState {
     Follower  { timer: Time },
-    Candidate { timer: Time, votes: uint },
+    Candidate { timer: Time, votes: uint, should_retry: bool },
     Leader    { timer: Time, heartbeat_seqno: uint, acks: uint, start_time: Time},
 }
 
@@ -88,9 +88,9 @@ impl fmt::Default for ServerState {
                 write!(f.buf, "Follower(timer: {})",
                        timer)
             },
-            Candidate{timer, votes} => {
-                write!(f.buf, "Candidate(timer: {}, votes: {})",
-                       timer, votes)
+            Candidate{timer, votes, should_retry} => {
+                write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {})",
+                       timer, votes, should_retry)
             },
             Leader{timer, heartbeat_seqno, acks, start_time} => {
                 write!(f.buf, "Leader(timer: {}, seqno: {}, acks: {}, start_time: {})",
@@ -128,24 +128,36 @@ impl Server {
             vote: None,
         }
     }
+    fn start_new_election(&mut self, env: &mut Environment) {
+        self.term = Term(*self.term + 1);
+        self.vote = None;
+        self.state = Candidate {
+            timer: env.make_time(150, 299),
+            votes: 1,
+            should_retry: match self.algorithm {
+                ~"hesitant" => false,
+                _ => true,
+            }
+        };
+        env.multicast(self.id, self.peers, &RequestVoteRequest {
+            term: self.term,
+            lastLogIndex: self.lastLogIndex,
+        });
+        self.try_become_leader(env);
+    }
     pub fn tick(&mut self, env: &mut Environment) {
         let mut need_step_down = false;
+
         match self.state {
-            Follower  {timer, _} |
-            Candidate {timer, _} => {
+            Follower  {timer, _} => {
                 if timer <= env.clock {
-                    self.term = Term(*self.term + 1);
-                    self.vote = None;
-                    self.state = Candidate {
-                        timer: env.make_time(150, 299),
-                        votes: 1,
-                    };
-                    env.multicast(self.id, self.peers, &RequestVoteRequest {
-                        term: self.term,
-                        lastLogIndex: self.lastLogIndex,
-                    });
+                    self.start_new_election(env)
                 }
-                self.try_become_leader(env);
+            }
+            Candidate {timer, should_retry, _} => {
+                if timer <= env.clock && should_retry {
+                    self.start_new_election(env)
+                }
             },
             Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, _} => {
                 if *timer <= env.clock {
@@ -223,27 +235,39 @@ impl Server {
                     if term > self.term {
                         self.step_down(env, term);
                     }
-                    match self.vote {
-                        None => {
-                            if lastLogIndex >= self.lastLogIndex {
+                    // careful ordering to support algorithm hesitant:
+                    // reply with LOG_STALE first
+                    if lastLogIndex < self.lastLogIndex {
+                        reply(LOG_STALE);
+                    } else {
+                        match self.vote {
+                            None => {
                                 self.vote = Some(msg.from);
                                 reply(GRANTED);
-                            } else {
-                                reply(LOG_STALE);
-                            }
-                        },
-                        Some(c) => {
-                            reply(if c == msg.from { GRANTED } else { VOTED });
-                        },
+                            },
+                            Some(c) => {
+                                reply(if c == msg.from { GRANTED } else { VOTED });
+                            },
+                        }
                     }
                 }
             },
             RequestVoteResponse {term, granted, _} => {
-                if term == self.term && granted == GRANTED {
+                if term == self.term {
                     match self.state {
                         Follower {_} => {},
-                        Candidate {votes: ref mut votes, _} => {
-                            *votes += 1;
+                        Candidate {votes: ref mut votes,
+                                   should_retry: ref mut should_retry,
+                                   _} => {
+                            match granted {
+                                GRANTED => {
+                                    *votes += 1;
+                                },
+                                TERM_STALE | VOTED => {
+                                    *should_retry = true;
+                                },
+                                LOG_STALE => {},
+                            }
                         },
                         Leader {_} => {},
                     }

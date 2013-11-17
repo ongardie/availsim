@@ -67,6 +67,7 @@ fill('timing', $('#timing'), [
 
 fill('algorithm', $('#algorithm'), [
   'submission',
+  'hesitant',
 ]);
 
 var crypto = require('crypto');
@@ -76,7 +77,6 @@ var args = $('#args', form);
 
 form.change(function() {
   setTimeout(function() {
-      console.log($('.active [name=timing]').val())
       form.submit();
   }, 0);
 });
@@ -95,7 +95,8 @@ var getArg = function(name) {
 form.submit(function() {
     var effargs = (args.val() +
                    getArg('logs') +
-                   getArg('timing'));
+                   getArg('timing') +
+                   getArg('algorithm'));
     console.log(effargs);
 
     var sha1sum = crypto.createHash('sha1');
