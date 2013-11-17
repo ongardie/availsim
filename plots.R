@@ -23,8 +23,8 @@ plotwd <- function() {
     run = read.csv('samples.csv')
 
     title <- with(meta,
-                sprintf('%s / logs %s / %d servers / %s trials',
-                        timing, log_length, servers,
+                sprintf('%s / %s / logs %s / %d servers / %s trials',
+                        algorithm, timing, log_length, servers,
                         format(trials, big.mark=',')))
 
     g <- {}
@@ -35,17 +35,15 @@ plotwd <- function() {
                               trans=reverselog_trans(10)) +
            expand_limits(x=c(0, 1000)) +
            xlab('Election Time') +
-           ylab('Cumulative Fraction') +
-           ggtitle(title)
+           ylab('Cumulative Fraction')
 
     g$cdf <- ggplot(run) + gtheme +
            stat_ecdf(aes(x=election_time)) +
            coord_cartesian(x=c(0, 1000)) +
            xlab('Election Time') +
-           ylab('Cumulative Fraction') +
-           ggtitle(title)
+           ylab('Cumulative Fraction')
 
-    ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1),
+    ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=title),
             filename='Rplots.svg',
             width=7, height=3.5)
 

@@ -92,6 +92,7 @@ struct LogEntry {
 struct Server {
     id: ServerID,
     peers: ~[ServerID],
+    algorithm: ~str,
     term: Term,
     state: ServerState,
     vote: Option<ServerID>,
@@ -99,10 +100,12 @@ struct Server {
 }
 
 impl Server {
-    pub fn new(id : ServerID, peers: ~[ServerID], env: &Environment) -> Server {
+    pub fn new(id : ServerID, peers: ~[ServerID], env: &Environment,
+               algorithm: &str) -> Server {
         Server {
             id: id,
             peers: peers,
+            algorithm: algorithm.into_owned(),
             term: Term(0),
             state: Follower { timer: env.make_time(150, 299) },
             lastLogIndex: Index(0),

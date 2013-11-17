@@ -48,10 +48,12 @@ var fill = function(name, div, opts) {
     '</label>');
 };
 
-var logs = ['same', 'diff'];
-fill('logs', $('#logs'), logs);
+fill('logs', $('#logs'), [
+  'same',
+  'diff',
+]);
 
-var timing = [
+fill('timing', $('#timing'), [
   'LAN',
   'WAN',
   'Delay1pct',
@@ -61,8 +63,11 @@ var timing = [
   'L1',
   'Deian',
   'BadRecv',
-];
-fill('timing', $('#timing'), timing);
+]);
+
+fill('algorithm', $('#algorithm'), [
+  'submission',
+]);
 
 var crypto = require('crypto');
 

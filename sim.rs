@@ -65,7 +65,7 @@ impl Environment {
 struct Cluster(~[Server]);
 
 impl Cluster {
-    fn new(env: &Environment, num_servers: uint) -> Cluster {
+    fn new(env: &Environment, num_servers: uint, algorithm: &str) -> Cluster {
         let mut servers = ~[];
         for i in range(0, num_servers) {
             let mut peers = ~[];
@@ -74,7 +74,7 @@ impl Cluster {
                     peers.push(ServerID(j + 1));
                 }
             }
-            let s = Server::new(ServerID(i + 1), peers, env);
+            let s = Server::new(ServerID(i + 1), peers, env, algorithm);
             servers.push(s);
         }
         return Cluster(servers);
@@ -104,9 +104,10 @@ impl Cluster {
 
 pub fn simulate(num_servers: uint,
                 timing_policy: ~TimingPolicy,
-                log_lengths: &str) -> Time {
+                log_lengths: &str,
+                algorithm: &str) -> Time {
     let env = &mut Environment::new(timing_policy);
-    let mut cluster = Cluster::new(env, num_servers);
+    let mut cluster = Cluster::new(env, num_servers, algorithm);
     cluster.set_log_lengths(log_lengths);
     let mut end = None;
     let mut ready_msgs = ~[]; // declared out here to avoid mallocs
