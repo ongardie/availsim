@@ -4,6 +4,7 @@ extern mod std;
 use basics::*;
 use std::fmt;
 use sim::Environment;
+use std::hashmap::HashSet;
 
 pub struct Message {
     from: ServerID,
@@ -78,11 +79,30 @@ impl fmt::Default for MessageBody {
 
 
 enum ServerState {
-    Follower  { timer: Time },
-    Candidate { timer: Time, votes: uint, should_retry: bool, pre: bool, max_term: Term, endorsements: uint },
-    Leader    { timer: Time, heartbeat_seqno: uint, acks: uint, start_time: Time},
+    Follower  {
+        timer: Time,
+    },
+    Candidate {
+        timer: Time,
+        votes: HashSet<ServerID>,
+        should_retry: bool,
+        pre: bool,
+        max_term: Term,
+        endorsements: HashSet<ServerID>,
+    },
+    Leader {
+        timer: Time,
+        heartbeat_seqno: uint,
+        acks: HashSet<ServerID>,
+        start_time: Time,
+    },
 }
 
+impl fmt::Default for HashSet<ServerID> {
+    fn fmt(set: &HashSet<ServerID>, f: &mut fmt::Formatter) {
+        write!(f.buf, "{} servers", set.len());
+    }
+}
 
 impl fmt::Default for ServerState {
     fn fmt(state: &ServerState, f: &mut fmt::Formatter) {
@@ -91,13 +111,13 @@ impl fmt::Default for ServerState {
                 write!(f.buf, "Follower(timer: {})",
                        timer)
             },
-            Candidate{timer, votes, should_retry, pre, max_term, endorsements} => {
+            Candidate{timer, votes: ref votes, should_retry, pre, max_term, endorsements: ref endorsements} => {
                 write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {}, pre: {}, max_term: {}, endorsements: {})",
-                       timer, votes, should_retry, pre, max_term, endorsements)
+                       timer, *votes, should_retry, pre, max_term, *endorsements)
             },
-            Leader{timer, heartbeat_seqno, acks, start_time} => {
+            Leader{timer, heartbeat_seqno, acks: ref acks, start_time} => {
                 write!(f.buf, "Leader(timer: {}, seqno: {}, acks: {}, start_time: {})",
-                       timer, heartbeat_seqno, acks, start_time)
+                       timer, heartbeat_seqno, *acks, start_time)
             },
         }
     }
@@ -108,9 +128,22 @@ struct LogEntry {
     // command: ~str,
 }
 
+struct Configuration(~[HashSet<ServerID>]);
+
+impl Configuration {
+    fn is_quorum(&self, servers: &HashSet<ServerID>) -> bool {
+        for c in self.iter() {
+            if c.intersection_iter(servers).len() <= c.len() / 2 {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
 struct Server {
     id: ServerID,
-    peers: ~[ServerID],
+    config: Configuration,
     algorithm: ~str,
     term: Term,
     state: ServerState,
@@ -119,7 +152,7 @@ struct Server {
 }
 
 impl Server {
-    pub fn new(id : ServerID, peers: ~[ServerID], env: &Environment,
+    pub fn new(id : ServerID, config: Configuration, env: &Environment,
                algorithm: &str) -> Server {
         match algorithm {
             "nograntnobump" |
@@ -132,7 +165,7 @@ impl Server {
         };
         Server {
             id: id,
-            peers: peers,
+            config: config,
             algorithm: algorithm.into_owned(),
             term: Term(0),
             state: Follower { timer: env.make_time(150, 299) },
@@ -155,7 +188,7 @@ impl Server {
         }
         self.state = Candidate {
             timer: env.make_time(150, 299),
-            votes: 1,
+            votes: newHashSet([self.id]),
             should_retry: match self.algorithm {
                 ~"hesitant"  => false,
                 ~"hesitant2" => false,
@@ -163,9 +196,9 @@ impl Server {
             },
             pre: pre,
             max_term: Term(0),
-            endorsements: 1,
+            endorsements: newHashSet([self.id]),
         };
-        env.multicast(self.id, self.peers, &RequestVoteRequest {
+        env.multicast(self.id, &self.config, &RequestVoteRequest {
             term: self.term,
             lastLogIndex: self.lastLogIndex,
         });
@@ -187,11 +220,12 @@ impl Server {
             },
             Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, _} => {
                 if *timer <= env.clock {
-                    if (*acks > (self.peers.len() + 1) / 2) {
+                    if (self.config.is_quorum(acks)) {
                         *heartbeat_seqno += 1;
-                        *acks = 1;
+                        acks.clear();
+                        acks.insert(self.id);
                         *timer = env.make_time(75, 75);
-                        env.multicast(self.id, self.peers, &AppendEntriesRequest {
+                        env.multicast(self.id, &self.config, &AppendEntriesRequest {
                             term: self.term,
                             seqno: *heartbeat_seqno,
                         });
@@ -217,23 +251,22 @@ impl Server {
     }
 
     fn try_become_leader(&mut self, env: &mut Environment) {
-        match self.state {
-            Follower {_} => {},
-            Candidate {votes, _} => {
-                if votes > (self.peers.len() + 1) / 2 {
-                    self.state = Leader {
-                        timer: env.make_time(75, 75),
-                        heartbeat_seqno: 0,
-                        acks: 1,
-                        start_time: env.clock,
-                    };
-                    env.multicast(self.id, self.peers, &AppendEntriesRequest {
-                        term: self.term,
-                        seqno: 0,
-                    });
-                }
-            },
-            Leader {_} => {},
+        let become_leader = match self.state {
+            Follower {_} => false,
+            Candidate {votes: ref votes, _} => self.config.is_quorum(votes),
+            Leader {_} => false,
+        };
+        if become_leader {
+            self.state = Leader {
+                timer: env.make_time(75, 75),
+                heartbeat_seqno: 0,
+                acks: newHashSet([self.id]),
+                start_time: env.clock,
+            };
+            env.multicast(self.id, &self.config, &AppendEntriesRequest {
+                term: self.term,
+                seqno: 0,
+            });
         }
     }
 
@@ -310,8 +343,8 @@ impl Server {
                             if *pre {
                                 *max_term = std::cmp::max(*max_term, msg_term);
                                 if logOk {
-                                    *endorsements += 1;
-                                    if *endorsements > (self.peers.len() + 1) / 2 {
+                                    endorsements.insert(msg.from);
+                                    if self.config.is_quorum(endorsements) {
                                         if self.algorithm == ~"zookeeper2" {
                                             forceNewElectionTerm = Some(*max_term);
                                         } else {
@@ -322,15 +355,15 @@ impl Server {
                             } else {
                                 match granted {
                                     GRANTED => {
-                                        *votes += 1;
+                                        votes.insert(msg.from);
                                     },
                                     TERM_STALE | VOTED => {
-                                        *endorsements += 1;
+                                        endorsements.insert(msg.from);
                                         if self.algorithm == ~"hesitant" {
                                             *should_retry = true;
                                         }
                                         if self.algorithm == ~"hesitant2" {
-                                            if *endorsements > (self.peers.len() + 1) / 2 {
+                                            if self.config.is_quorum(endorsements) {
                                                 *should_retry = true;
                                             }
                                         }
@@ -369,7 +402,7 @@ impl Server {
                         Follower {_} | Candidate {_} => {},
                         Leader { heartbeat_seqno, acks: ref mut acks, _ } => {
                             if seqno == heartbeat_seqno {
-                                *acks += 1;
+                                acks.insert(msg.from);
                             }
                         },
                     }

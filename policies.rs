@@ -100,14 +100,6 @@ impl TimingPolicy for Links {
     }
 }
 
-fn newHashSet<T: Clone + IterBytes + Hash + Eq>(elements: &[T]) -> HashSet<T> {
-    let mut set = HashSet::new();
-    for e in elements.iter() {
-        set.insert(e.clone());
-    }
-    return set;
-}
-
 macro_rules! partition(
     ($name:expr: $($id:expr) +) => (
         Partition::new([$(ServerID($id),)+], make(stringify!($name)))

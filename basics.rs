@@ -1,5 +1,6 @@
 use std::fmt;
 use std::rand;
+use std::hashmap::HashSet;
 
 pub fn randrange(min : uint, max : uint) -> uint {
     min + rand::random::<uint>() % (max - min + 1)
@@ -46,5 +47,13 @@ impl fmt::Default for Time {
     fn fmt(time: &Time, f: &mut fmt::Formatter) {
         write!(f.buf, "{}", **time)
     }
+}
+
+pub fn newHashSet<T: Clone + IterBytes + Hash + Eq>(elements: &[T]) -> HashSet<T> {
+    let mut set = HashSet::new();
+    for e in elements.iter() {
+        set.insert(e.clone());
+    }
+    return set;
 }
 

@@ -2,7 +2,8 @@
 extern mod std;
 use basics::*;
 use policies::TimingPolicy;
-use raft::{Message, MessageBody, Server};
+use raft::{Message, MessageBody, Configuration, Server};
+use std::hashmap::HashSet;
 
 struct SimMessage {
     deliver: Time,
@@ -26,17 +27,21 @@ impl Environment {
     pub fn make_time(&self, min: uint, max: uint) -> Time {
         self.clock + randrange(min, max)
     }
-    pub fn multicast(&mut self, from: ServerID, to: &[ServerID], body: &MessageBody) {
-        for peer in to.iter() {
-            let m = SimMessage {
-                deliver: self.clock + self.timing.network_latency(from, *peer),
-                msg: Message {
-                    from: from,
-                    to: *peer,
-                    body: *body,
-                },
-            };
-            self.network.push(m);
+    pub fn multicast(&mut self, from: ServerID, to: &Configuration, body: &MessageBody) {
+        for l in to.iter() {
+            for peer in l.iter() {
+                if *peer != from {
+                    let m = SimMessage {
+                        deliver: self.clock + self.timing.network_latency(from, *peer),
+                        msg: Message {
+                            from: from,
+                            to: *peer,
+                            body: *body,
+                        },
+                    };
+                    self.network.push(m);
+                }
+            }
         }
     }
     pub fn reply(&mut self, request: &Message, response_body: &MessageBody) {
@@ -68,13 +73,11 @@ impl Cluster {
     fn new(env: &Environment, num_servers: uint, algorithm: &str) -> Cluster {
         let mut servers = ~[];
         for i in range(0, num_servers) {
-            let mut peers = ~[];
+            let mut config = HashSet::new();
             for j in range(0, num_servers) {
-                if i != j {
-                    peers.push(ServerID(j + 1));
-                }
+                config.insert(ServerID(j + 1));
             }
-            let s = Server::new(ServerID(i + 1), peers, env, algorithm);
+            let s = Server::new(ServerID(i + 1), Configuration(~[config]), env, algorithm);
             servers.push(s);
         }
         return Cluster(servers);
