@@ -78,6 +78,7 @@ fn main() {
         getopts::optopt("algorithm"),
         getopts::optopt("cluster"),
         getopts::optopt("logs"),
+        getopts::optopt("maxticks"),
         getopts::optopt("samples"),
         getopts::optopt("tasks"),
         getopts::optopt("terms"),
@@ -94,6 +95,8 @@ fn main() {
         println!("--cluster=POLICY Type/size of cluster (default 5)");
         println!("-h, --help       Print this help message");
         println!("--logs=POLICY    Log length policy (default same)");
+        println!("--maxticks=N     Number of simulation ticks after which ");
+        println!("                 to stop a sample (default 5000)");
         println!("--samples=N      Number of simulations (default 10,000)");
         println!("--tasks=N        Number of parallel jobs (default {})",
                  std::rt::default_sched_threads() - 1);
@@ -121,6 +124,16 @@ fn main() {
     let log_length : ~str = match matches.opt_str("logs") {
         Some(s) => { s },
         None => { ~"same" },
+    };
+    let max_ticks : Time = match matches.opt_str("maxticks") {
+        Some(s) => { match std::from_str::from_str(s) {
+            Some(i) => { Time(i) },
+            None => {
+                usage();
+                fail!(format!("Couldn't parse max number of ticks from '{}'", s));
+            },
+        }},
+        None => { Time(5000) },
     };
     let num_samples : uint = match matches.opt_str("samples") {
         Some(s) => { match std::from_str::from_str(s) {
@@ -170,6 +183,7 @@ fn main() {
     meta.push((~"algorithm",  algorithm.clone()));
     meta.push((~"log_length", log_length.clone()));
     meta.push((~"cluster",    cluster.clone()));
+    meta.push((~"maxticks",   format!("{}", max_ticks)));
     meta.push((~"tasks",      format!("{}", num_tasks)));
     meta.push((~"terms",      terms.clone()));
     meta.push((~"timing",     timing.clone()));
@@ -179,6 +193,7 @@ fn main() {
     println!("Algorithm:  {}", algorithm)
     println!("Cluster:    {}", cluster)
     println!("Log length: {}", log_length)
+    println!("Max ticks:  {}", max_ticks)
     println!("Tasks:      {}", num_tasks)
     println!("Terms:      {}", terms)
     println!("Timing:     {}", timing)
@@ -191,7 +206,7 @@ fn main() {
     signals.register(std::io::signal::Interrupt);
 
     let samples = if num_tasks <= 1 {
-        run_task(num_samples, cluster, timing, log_length, algorithm, terms, &signals.port)
+        run_task(num_samples, cluster, timing, log_length, algorithm, terms, max_ticks, &signals.port)
     } else {
         let (mut port, chan): (std::comm::Port<~[Time]>, std::comm::Chan<~[Time]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
@@ -217,7 +232,7 @@ fn main() {
                 } else {
                     num_samples / num_tasks
                 };
-                child_chan.send(run_task(n, child_cluster, child_timing, child_log_length, child_algorithm, child_terms, &exit_port));
+                child_chan.send(run_task(n, child_cluster, child_timing, child_log_length, child_algorithm, child_terms, max_ticks, &exit_port));
             }
         }
 
@@ -294,6 +309,7 @@ fn run_task<T: Send>(n: uint,
                      log_length: &str,
                      algorithm: &str,
                      terms: &str,
+                     max_ticks: Time,
                      exit_port: &Port<T>) -> ~[Time] {
     let mut samples = ~[];
     samples.reserve(n);
@@ -303,7 +319,7 @@ fn run_task<T: Send>(n: uint,
         }
         // TODO: may be better to reuse these timing policies.
         let p = policies::make(timing);
-        let sample = sim::simulate(cluster, p, log_length, algorithm, terms);
+        let sample = sim::simulate(cluster, p, log_length, algorithm, terms, max_ticks);
         samples.push(sample);
     }
     extra::sort::tim_sort(samples);

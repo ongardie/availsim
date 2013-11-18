@@ -6,8 +6,15 @@ pub fn randrange(min : uint, max : uint) -> uint {
     min + rand::random::<uint>() % (max - min + 1)
 }
 
-#[deriving(Eq, IterBytes, Clone)]
+#[deriving(Eq, IterBytes, Clone, Ord)]
 pub struct ServerID(uint);
+
+impl fmt::Default for ServerID {
+    fn fmt(id: &ServerID, f: &mut fmt::Formatter) {
+        write!(f.buf, "{}", **id)
+    }
+}
+
 
 #[deriving(Eq, Ord)]
 pub struct Term(uint);

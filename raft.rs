@@ -1,5 +1,7 @@
 #[feature(globs)];
+#[feature(struct_variant)];
 extern mod std;
+extern mod extra;
 
 use basics::*;
 use std::fmt;
@@ -100,7 +102,23 @@ enum ServerState {
 
 impl fmt::Default for HashSet<ServerID> {
     fn fmt(set: &HashSet<ServerID>, f: &mut fmt::Formatter) {
-        write!(f.buf, "{} servers", set.len());
+        write!(f.buf, "\\{");
+        let mut sorted = set.iter().to_owned_vec();
+        extra::sort::tim_sort(sorted);
+        for s in sorted.iter() {
+            write!(f.buf, "{}", **s);
+        }
+        write!(f.buf, "\\}");
+    }
+}
+
+impl fmt::Default for Configuration {
+    fn fmt(config: &Configuration, f: &mut fmt::Formatter) {
+        write!(f.buf, "[");
+        for c in config.iter() {
+            write!(f.buf, "{}", *c);
+        }
+        write!(f.buf, "]");
     }
 }
 
@@ -150,6 +168,19 @@ struct Server {
     vote: Option<ServerID>,
     lastLogIndex: Index,
 }
+
+impl fmt::Default for Server {
+    fn fmt(server: &Server, f: &mut fmt::Formatter) {
+        write!(f.buf, "Server(id: {}, term: {}, log: {}, vote: {}, state: {}, config: {})",
+               server.id,
+               server.term,
+               server.lastLogIndex,
+               server.vote,
+               server.state,
+               server.config)
+    }
+}
+
 
 impl Server {
     pub fn new(id : ServerID, config: Configuration, env: &Environment,
@@ -243,10 +274,15 @@ impl Server {
         }
     }
     fn step_down(&mut self, env: &Environment, term: Term) {
+        let t = match self.state {
+            Follower { timer, _ } => timer,
+            Candidate { timer, _ } => timer,
+            Leader{_} => env.make_time(150, 299),
+        };
         self.term = term;
         self.vote = None;
         self.state = Follower {
-            timer: env.make_time(150, 299),
+            timer: t,
         };
     }
 
@@ -307,6 +343,11 @@ impl Server {
                                     self.step_down(env, term);
                                 }
                                 self.vote = Some(msg.from);
+                                match self.state {
+                                    Follower { timer: ref mut timer, _ } =>
+                                        *timer = env.make_time(150, 299),
+                                    _ => {},
+                                }
                                 reply(GRANTED);
                             },
                             Some(c) => {
@@ -406,16 +447,12 @@ impl Server {
                             }
                         },
                     }
+                } else if term > self.term {
+                    self.step_down(env, term)
                 }
             },
         }
     }
 
 } // Server impl
-
-impl fmt::Default for Server {
-    fn fmt(server: &Server, f: &mut fmt::Formatter) {
-        write!(f.buf, "Server {}: {}", *server.id, server.state)
-    }
-}
 

@@ -51,6 +51,8 @@ var fill = function(name, div, opts) {
 fill('logs', $('#logs'), [
   'same',
   'diff',
+  'diff-oldstale',
+  'diff-oldminstale',
 ]);
 
 fill('timing', $('#timing'), [
@@ -84,6 +86,7 @@ fill('cluster', $('#cluster'), [
   '5',
   '7',
   '9',
+  '5-2+2',
 ]);
 
 
