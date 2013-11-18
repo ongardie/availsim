@@ -84,6 +84,7 @@ fn main() {
         getopts::optopt("terms"),
         getopts::optopt("timeout"),
         getopts::optopt("timing"),
+        getopts::optflag("trace"),
     ];
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => { m },
@@ -104,6 +105,7 @@ fn main() {
         println!("--timeout=MS     Milliseconds after which to stop");
         println!("                 (default 0 meaning infinity)");
         println!("--timing=POLICY  Network timing policy (default LAN)");
+        println!("--trace          Dump simulation trace to stdout");
     };
     if matches.opt_present("h") || matches.opt_present("help") {
         usage();
@@ -178,6 +180,7 @@ fn main() {
         Some(s) => { s },
         None => { ~"LAN" },
     };
+    let trace : bool = matches.opt_present("trace");
 
     let mut meta : ~[(~str, ~str)] = ~[];
     meta.push((~"algorithm",  algorithm.clone()));
@@ -206,7 +209,7 @@ fn main() {
     signals.register(std::io::signal::Interrupt);
 
     let samples = if num_tasks <= 1 {
-        run_task(num_samples, cluster, timing, log_length, algorithm, terms, max_ticks, &signals.port)
+        run_task(num_samples, cluster, timing, log_length, algorithm, terms, max_ticks, trace, &signals.port)
     } else {
         let (mut port, chan): (std::comm::Port<~[Time]>, std::comm::Chan<~[Time]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
@@ -232,7 +235,7 @@ fn main() {
                 } else {
                     num_samples / num_tasks
                 };
-                child_chan.send(run_task(n, child_cluster, child_timing, child_log_length, child_algorithm, child_terms, max_ticks, &exit_port));
+                child_chan.send(run_task(n, child_cluster, child_timing, child_log_length, child_algorithm, child_terms, max_ticks, trace, &exit_port));
             }
         }
 
@@ -310,6 +313,7 @@ fn run_task<T: Send>(n: uint,
                      algorithm: &str,
                      terms: &str,
                      max_ticks: Time,
+                     trace: bool,
                      exit_port: &Port<T>) -> ~[Time] {
     let mut samples = ~[];
     samples.reserve(n);
@@ -319,7 +323,7 @@ fn run_task<T: Send>(n: uint,
         }
         // TODO: may be better to reuse these timing policies.
         let p = policies::make(timing);
-        let sample = sim::simulate(cluster, p, log_length, algorithm, terms, max_ticks);
+        let sample = sim::simulate(cluster, p, log_length, algorithm, terms, max_ticks, trace);
         samples.push(sample);
     }
     extra::sort::tim_sort(samples);

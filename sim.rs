@@ -192,7 +192,8 @@ pub fn simulate(cluster_policy: &str,
                 log_lengths: &str,
                 algorithm: &str,
                 terms: &str,
-                max_ticks: Time) -> Time {
+                max_ticks: Time,
+                trace: bool) -> Time {
     let env = &mut Environment::new(timing_policy);
     let mut cluster = Cluster::new(env, cluster_policy, algorithm);
     cluster.set_log_lengths(log_lengths);
@@ -224,16 +225,15 @@ pub fn simulate(cluster_policy: &str,
             }
         }
 
-        // useful for debugging:
-        if false {
+        if trace {
             println!("Tick: {}", env.clock);
             for server in cluster.iter() {
                 println!("{}", *server);
             }
             // Stack overflow?
-            //for message in env.network.iter() {
-            //    println!("{}", *message);
-            //}
+            for message in env.network.iter() {
+                println!("{}", *message);
+            }
             println!("");
         }
 

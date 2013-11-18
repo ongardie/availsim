@@ -33,8 +33,12 @@ enum VoteGranted {
 
 impl fmt::Default for VoteGranted {
     fn fmt(g: &VoteGranted, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}",
-               *g);
+        write!(f.buf, "{}", match *g {
+            GRANTED    => "GRANTED",
+            TERM_STALE => "TERM_STALE",
+            LOG_STALE  => "LOG_STALE",
+            VOTED      => "VOTED",
+        });
     }
 }
 
