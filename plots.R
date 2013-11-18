@@ -35,7 +35,9 @@ plotwd <- function() {
                               trans=reverselog_trans(10)) +
            expand_limits(x=c(0, 1000)) +
            xlab('Election Time') +
-           ylab('Cumulative Fraction')
+           ylab('Cumulative Fraction') +
+           geom_vline(xintercept = 1000)
+
 
     g$cdf <- ggplot(run) + gtheme +
            stat_ecdf(aes(x=election_time)) +

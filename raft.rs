@@ -79,7 +79,7 @@ impl fmt::Default for MessageBody {
 
 enum ServerState {
     Follower  { timer: Time },
-    Candidate { timer: Time, votes: uint, should_retry: bool, pre: bool },
+    Candidate { timer: Time, votes: uint, should_retry: bool, pre: bool, max_term: Term },
     Leader    { timer: Time, heartbeat_seqno: uint, acks: uint, start_time: Time},
 }
 
@@ -91,9 +91,9 @@ impl fmt::Default for ServerState {
                 write!(f.buf, "Follower(timer: {})",
                        timer)
             },
-            Candidate{timer, votes, should_retry, pre} => {
-                write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {}, pre: {})",
-                       timer, votes, should_retry, pre)
+            Candidate{timer, votes, should_retry, pre, max_term} => {
+                write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {}, pre: {}, max_term: {})",
+                       timer, votes, should_retry, pre, max_term)
             },
             Leader{timer, heartbeat_seqno, acks, start_time} => {
                 write!(f.buf, "Leader(timer: {}, seqno: {}, acks: {}, start_time: {})",
@@ -125,6 +125,7 @@ impl Server {
             "hesitant"      |
             "nograntnobump" |
             "zookeeper"     |
+            "zookeeper2"    |
             "submission"    => {},
             _ => fail!("Unknown algorithm: {}", algorithm)
         };
@@ -138,13 +139,17 @@ impl Server {
             vote: None,
         }
     }
-    fn start_new_election(&mut self, env: &mut Environment, force: bool) {
-        let pre = !force && match self.algorithm {
-            ~"zookeeper" => true,
+    fn start_new_election(&mut self, env: &mut Environment, forceTerm: Option<Term>) {
+        let pre = forceTerm.is_none() && match self.algorithm {
+            ~"zookeeper"  => true,
+            ~"zookeeper2" => true,
             _ => false,
         };
         if !pre {
-            self.term = Term(*self.term + 1);
+            self.term = match forceTerm {
+                Some(t) if t > self.term => Term(*t + 1),
+                _                        => Term(*self.term + 1),
+            };
             self.vote = None;
         }
         self.state = Candidate {
@@ -155,6 +160,7 @@ impl Server {
                 _ => true,
             },
             pre: pre,
+            max_term: Term(0),
         };
         env.multicast(self.id, self.peers, &RequestVoteRequest {
             term: self.term,
@@ -168,12 +174,12 @@ impl Server {
         match self.state {
             Follower  {timer, _} => {
                 if timer <= env.clock {
-                    self.start_new_election(env, false)
+                    self.start_new_election(env, None)
                 }
             }
             Candidate {timer, should_retry, _} => {
                 if timer <= env.clock && should_retry {
-                    self.start_new_election(env, false)
+                    self.start_new_election(env, None)
                 }
             },
             Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, _} => {
@@ -275,19 +281,38 @@ impl Server {
                 }
             },
             RequestVoteResponse {term, granted, logOk} => {
+                let msg_term = term;
+                let term = match self.state {
+                    Candidate {pre, _} => {
+                        if (term > self.term &&
+                            pre &&
+                            self.algorithm == ~"zookeeper2") {
+                            self.term
+                        } else {
+                            term
+                        }
+                    },
+                    _ => term,
+                };
                 if term == self.term {
-                    let mut forceNewElection = false;
+                    let mut forceNewElectionTerm = None;
                     match self.state {
                         Follower {_} => {},
                         Candidate {votes: ref mut votes,
                                    should_retry: ref mut should_retry,
                                    pre: ref mut pre,
+                                   max_term: ref mut max_term,
                                    _} => {
                             if *pre {
+                                *max_term = std::cmp::max(*max_term, msg_term);
                                 if logOk {
                                     *votes += 1;
                                     if *votes > (self.peers.len() + 1) / 2 {
-                                        forceNewElection = true;
+                                        if self.algorithm == ~"zookeeper2" {
+                                            forceNewElectionTerm = Some(*max_term);
+                                        } else {
+                                            forceNewElectionTerm = Some(Term(0));
+                                        }
                                     }
                                 }
                             } else {
@@ -304,9 +329,10 @@ impl Server {
                         },
                         Leader {_} => {},
                     }
-                    if forceNewElection {
-                        self.start_new_election(env, true);
-                    }
+                    match forceNewElectionTerm {
+                        Some(t) => self.start_new_election(env, Some(t)),
+                        None => {},
+                    };
                     self.try_become_leader(env)
                 } else if term > self.term {
                     self.step_down(env, term);
