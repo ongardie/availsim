@@ -23,8 +23,8 @@ plotwd <- function() {
     run = read.csv('samples.csv')
 
     title <- with(meta,
-                sprintf('%s / %s / logs %s / terms %s / %d servers / %s trials',
-                        algorithm, timing, log_length, terms, servers,
+                sprintf('%s / %s / logs %s / terms %s / cluster %s / %s trials',
+                        algorithm, timing, log_length, terms, cluster,
                         format(trials, big.mark=',')))
 
     g <- {}

@@ -79,6 +79,13 @@ fill('terms', $('#terms'), [
   'diff',
 ]);
 
+fill('cluster', $('#cluster'), [
+  '3',
+  '5',
+  '7',
+  '9',
+]);
+
 
 var crypto = require('crypto');
 
@@ -107,7 +114,8 @@ form.submit(function() {
                    getArg('logs') +
                    getArg('terms') +
                    getArg('timing') +
-                   getArg('algorithm'));
+                   getArg('algorithm') +
+                   getArg('cluster'));
     console.log(effargs);
 
     var sha1sum = crypto.createHash('sha1');

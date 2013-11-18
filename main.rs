@@ -76,9 +76,9 @@ fn main() {
         getopts::optflag("h"),
         getopts::optflag("help"),
         getopts::optopt("algorithm"),
+        getopts::optopt("cluster"),
         getopts::optopt("logs"),
         getopts::optopt("samples"),
-        getopts::optopt("servers"),
         getopts::optopt("tasks"),
         getopts::optopt("terms"),
         getopts::optopt("timeout"),
@@ -91,10 +91,10 @@ fn main() {
     let usage = || {
         println!("Usage: {} [options]", args[0]);
         println!("--algorithm=ALGO Algorithm variant (default submission)");
+        println!("--cluster=POLICY Type/size of cluster (default 5)");
         println!("-h, --help       Print this help message");
         println!("--logs=POLICY    Log length policy (default same)");
         println!("--samples=N      Number of simulations (default 10,000)");
-        println!("--servers=N      Simulate cluster with N servers");
         println!("--tasks=N        Number of parallel jobs (default {})",
                  std::rt::default_sched_threads() - 1);
         println!("--terms=POLICY   Initial terms policy (default same)");
@@ -114,6 +114,10 @@ fn main() {
         Some(s) => { s },
         None => { ~"submission" },
     };
+    let cluster : ~str = match matches.opt_str("cluster") {
+        Some(s) => { s },
+        None => { ~"5" },
+    };
     let log_length : ~str = match matches.opt_str("logs") {
         Some(s) => { s },
         None => { ~"same" },
@@ -127,16 +131,6 @@ fn main() {
             },
         }},
         None => { 10000 },
-    };
-    let num_servers : uint = match matches.opt_str("servers") {
-        Some(s) => { match std::from_str::from_str(s) {
-            Some(i) => { i },
-            None => {
-                usage();
-                fail!(format!("Couldn't parse number of servers from '{}'", s));
-            },
-        }},
-        None => { 5 },
     };
     let num_tasks : uint = match matches.opt_str("tasks") {
         Some(s) => { match std::from_str::from_str(s) {
@@ -175,7 +169,7 @@ fn main() {
     let mut meta : ~[(~str, ~str)] = ~[];
     meta.push((~"algorithm",  algorithm.clone()));
     meta.push((~"log_length", log_length.clone()));
-    meta.push((~"servers",    format!("{}", num_servers)));
+    meta.push((~"cluster",    cluster.clone()));
     meta.push((~"tasks",      format!("{}", num_tasks)));
     meta.push((~"terms",      terms.clone()));
     meta.push((~"timing",     timing.clone()));
@@ -183,8 +177,8 @@ fn main() {
     meta.push((~"timeout",    format!("{}", timeout)));
 
     println!("Algorithm:  {}", algorithm)
+    println!("Cluster:    {}", cluster)
     println!("Log length: {}", log_length)
-    println!("Servers:    {}", num_servers)
     println!("Tasks:      {}", num_tasks)
     println!("Terms:      {}", terms)
     println!("Timing:     {}", timing)
@@ -197,7 +191,7 @@ fn main() {
     signals.register(std::io::signal::Interrupt);
 
     let samples = if num_tasks <= 1 {
-        run_task(num_samples, num_servers, timing, log_length, algorithm, terms, &signals.port)
+        run_task(num_samples, cluster, timing, log_length, algorithm, terms, &signals.port)
     } else {
         let (mut port, chan): (std::comm::Port<~[Time]>, std::comm::Chan<~[Time]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
@@ -215,6 +209,7 @@ fn main() {
             let child_timing = timing.clone();
             let child_algorithm = algorithm.clone();
             let child_terms = terms.clone();
+            let child_cluster = cluster.clone();
             do spawn {
                 let n = if tid == 0 {
                     // get the odd one left over
@@ -222,7 +217,7 @@ fn main() {
                 } else {
                     num_samples / num_tasks
                 };
-                child_chan.send(run_task(n, num_servers, child_timing, child_log_length, child_algorithm, child_terms, &exit_port));
+                child_chan.send(run_task(n, child_cluster, child_timing, child_log_length, child_algorithm, child_terms, &exit_port));
             }
         }
 
@@ -294,7 +289,7 @@ fn main() {
 }
 
 fn run_task<T: Send>(n: uint,
-                     num_servers: uint,
+                     cluster: &str,
                      timing: &str,
                      log_length: &str,
                      algorithm: &str,
@@ -308,7 +303,7 @@ fn run_task<T: Send>(n: uint,
         }
         // TODO: may be better to reuse these timing policies.
         let p = policies::make(timing);
-        let sample = sim::simulate(num_servers, p, log_length, algorithm, terms);
+        let sample = sim::simulate(cluster, p, log_length, algorithm, terms);
         samples.push(sample);
     }
     extra::sort::tim_sort(samples);

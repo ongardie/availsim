@@ -70,7 +70,27 @@ impl Environment {
 struct Cluster(~[Server]);
 
 impl Cluster {
-    fn new(env: &Environment, num_servers: uint, algorithm: &str) -> Cluster {
+    fn new(env: &Environment, policy: &str, algorithm: &str) -> Cluster {
+        match policy {
+            "2"  => Cluster::flat(env,  2, algorithm),
+            "3"  => Cluster::flat(env,  3, algorithm),
+            "4"  => Cluster::flat(env,  4, algorithm),
+            "5"  => Cluster::flat(env,  5, algorithm),
+            "6"  => Cluster::flat(env,  6, algorithm),
+            "7"  => Cluster::flat(env,  7, algorithm),
+            "8"  => Cluster::flat(env,  8, algorithm),
+            "9"  => Cluster::flat(env,  9, algorithm),
+            "10" => Cluster::flat(env, 10, algorithm),
+            "11" => Cluster::flat(env, 11, algorithm),
+            "12" => Cluster::flat(env, 12, algorithm),
+            "13" => Cluster::flat(env, 13, algorithm),
+            "14" => Cluster::flat(env, 14, algorithm),
+            "15" => Cluster::flat(env, 15, algorithm),
+            _ => fail!("Unknown cluster policy: {}", policy)
+        }
+    }
+
+    fn flat(env: &Environment, num_servers: uint, algorithm: &str) -> Cluster {
         let mut servers = ~[];
         for i in range(0, num_servers) {
             let mut config = HashSet::new();
@@ -122,13 +142,13 @@ impl Cluster {
     }
 }
 
-pub fn simulate(num_servers: uint,
+pub fn simulate(cluster_policy: &str,
                 timing_policy: ~TimingPolicy,
                 log_lengths: &str,
                 algorithm: &str,
                 terms: &str) -> Time {
     let env = &mut Environment::new(timing_policy);
-    let mut cluster = Cluster::new(env, num_servers, algorithm);
+    let mut cluster = Cluster::new(env, cluster_policy, algorithm);
     cluster.set_log_lengths(log_lengths);
     cluster.set_terms(terms);
     let mut end = None;
