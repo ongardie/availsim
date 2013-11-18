@@ -79,7 +79,7 @@ impl fmt::Default for MessageBody {
 
 enum ServerState {
     Follower  { timer: Time },
-    Candidate { timer: Time, votes: uint, should_retry: bool, pre: bool, max_term: Term },
+    Candidate { timer: Time, votes: uint, should_retry: bool, pre: bool, max_term: Term, endorsements: uint },
     Leader    { timer: Time, heartbeat_seqno: uint, acks: uint, start_time: Time},
 }
 
@@ -91,9 +91,9 @@ impl fmt::Default for ServerState {
                 write!(f.buf, "Follower(timer: {})",
                        timer)
             },
-            Candidate{timer, votes, should_retry, pre, max_term} => {
-                write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {}, pre: {}, max_term: {})",
-                       timer, votes, should_retry, pre, max_term)
+            Candidate{timer, votes, should_retry, pre, max_term, endorsements} => {
+                write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {}, pre: {}, max_term: {}, endorsements: {})",
+                       timer, votes, should_retry, pre, max_term, endorsements)
             },
             Leader{timer, heartbeat_seqno, acks, start_time} => {
                 write!(f.buf, "Leader(timer: {}, seqno: {}, acks: {}, start_time: {})",
@@ -122,8 +122,9 @@ impl Server {
     pub fn new(id : ServerID, peers: ~[ServerID], env: &Environment,
                algorithm: &str) -> Server {
         match algorithm {
-            "hesitant"      |
             "nograntnobump" |
+            "hesitant"      |
+            "hesitant2"     |
             "zookeeper"     |
             "zookeeper2"    |
             "submission"    => {},
@@ -156,11 +157,13 @@ impl Server {
             timer: env.make_time(150, 299),
             votes: 1,
             should_retry: match self.algorithm {
-                ~"hesitant" => false,
+                ~"hesitant"  => false,
+                ~"hesitant2" => false,
                 _ => true,
             },
             pre: pre,
             max_term: Term(0),
+            endorsements: 1,
         };
         env.multicast(self.id, self.peers, &RequestVoteRequest {
             term: self.term,
@@ -216,8 +219,8 @@ impl Server {
     fn try_become_leader(&mut self, env: &mut Environment) {
         match self.state {
             Follower {_} => {},
-            Candidate {votes, pre, _} => {
-                if !pre && votes > (self.peers.len() + 1) / 2 {
+            Candidate {votes, _} => {
+                if votes > (self.peers.len() + 1) / 2 {
                     self.state = Leader {
                         timer: env.make_time(75, 75),
                         heartbeat_seqno: 0,
@@ -302,12 +305,13 @@ impl Server {
                                    should_retry: ref mut should_retry,
                                    pre: ref mut pre,
                                    max_term: ref mut max_term,
+                                   endorsements: ref mut endorsements,
                                    _} => {
                             if *pre {
                                 *max_term = std::cmp::max(*max_term, msg_term);
                                 if logOk {
-                                    *votes += 1;
-                                    if *votes > (self.peers.len() + 1) / 2 {
+                                    *endorsements += 1;
+                                    if *endorsements > (self.peers.len() + 1) / 2 {
                                         if self.algorithm == ~"zookeeper2" {
                                             forceNewElectionTerm = Some(*max_term);
                                         } else {
@@ -321,7 +325,15 @@ impl Server {
                                         *votes += 1;
                                     },
                                     TERM_STALE | VOTED => {
-                                        *should_retry = true;
+                                        *endorsements += 1;
+                                        if self.algorithm == ~"hesitant" {
+                                            *should_retry = true;
+                                        }
+                                        if self.algorithm == ~"hesitant2" {
+                                            if *endorsements > (self.peers.len() + 1) / 2 {
+                                                *should_retry = true;
+                                            }
+                                        }
                                     },
                                     LOG_STALE => {},
                                 }
