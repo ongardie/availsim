@@ -276,6 +276,17 @@ impl Server {
             self.step_down(env, self.term)
         }
     }
+
+    pub fn next_tick(&self) -> Time {
+        let mut r = NEVER;
+        match self.state {
+            Follower { timer, _ }  => r = std::cmp::min(r, timer),
+            Candidate { timer, _ } => r = std::cmp::min(r, timer),
+            Leader { timer, _ }    => r = std::cmp::min(r, timer),
+        }
+        return r;
+    }
+
     fn step_down(&mut self, env: &Environment, term: Term) {
         let t = match self.state {
             Follower { timer, _ } => timer,

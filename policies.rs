@@ -63,7 +63,7 @@ impl TimingPolicy for Partitions {
                 return partition.timing.network_latency(from, to);
             }
         }
-        return NEVER;
+        return INFINITY;
     }
 }
 
@@ -113,7 +113,7 @@ pub fn make(name: &str) -> ~TimingPolicy {
             a: ~Uniform(2, 5) as ~TimingPolicy,
             b: ~Uniform(5, 100) as ~TimingPolicy,
         } as ~TimingPolicy,
-        "Down" => ~Uniform(NEVER, NEVER)
+        "Down" => ~Uniform(INFINITY, INFINITY)
         as ~TimingPolicy,
         "LAN" => ~Uniform(2, 5)
         as ~TimingPolicy,

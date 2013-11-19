@@ -41,7 +41,8 @@ pub struct Time(uint);
 
 // An integer big enough to represent infinity in the simulations, but small
 // enough that it'll never overflow.
-pub static NEVER : uint = 1<<30;
+pub static NEVER : Time = Time(1<<30);
+pub static INFINITY : uint = 1<<30;
 
 
 impl Add<uint, Time> for Time {

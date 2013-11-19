@@ -73,6 +73,14 @@ impl Environment {
             }
         }
     }
+
+    fn next_tick(&self) -> Time {
+        let mut r = NEVER;
+        for m in self.network.iter() {
+            r = std::cmp::min(r, m.deliver)
+        }
+        return r;
+    }
 }
 
 struct Cluster(~[Server]);
@@ -201,8 +209,12 @@ pub fn simulate(cluster_policy: &str,
 
     let mut end = None;
     let mut ready_msgs = ~[]; // declared out here to avoid mallocs
+    let mut next_tick = Time(0);
     while end.is_none() {
-        env.clock = Time(*env.clock + 1);
+
+        env.clock = next_tick;
+        next_tick = NEVER;
+
         if env.clock >= max_ticks {
             end = Some(max_ticks);
             break;
@@ -235,6 +247,11 @@ pub fn simulate(cluster_policy: &str,
                 println!("{}", *message);
             }
             println!("");
+        }
+
+        next_tick = std::cmp::min(next_tick, env.next_tick());
+        for server in cluster.iter() {
+            next_tick = std::cmp::min(next_tick, server.next_tick());
         }
 
     }
