@@ -175,13 +175,12 @@ struct Server {
 
 impl fmt::Default for Server {
     fn fmt(server: &Server, f: &mut fmt::Formatter) {
-        write!(f.buf, "Server(id: {}, term: {}, log: {}, vote: {}, state: {}, config: {})",
+        write!(f.buf, "Server(id: {}, term: {}, log: {}, vote: {}, state: {})",
                server.id,
                server.term,
                server.lastLogIndex,
                server.vote,
-               server.state,
-               server.config)
+               server.state)
     }
 }
 
