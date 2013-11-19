@@ -1,5 +1,6 @@
 #[feature(globs)];
 extern mod std;
+extern mod extra;
 use basics::*;
 use policies::TimingPolicy;
 use raft::{Message, MessageBody, Configuration, Server};
@@ -7,13 +8,14 @@ use std::hashmap::HashSet;
 use std::fmt;
 
 struct SimMessage {
+    sent: Time,
     deliver: Time,
     msg: Message,
 }
 
 impl fmt::Default for SimMessage {
     fn fmt(msg: &SimMessage, f: &mut fmt::Formatter) {
-        write!(f.buf, "{} delayed until {}", msg.msg, msg.deliver);
+        write!(f.buf, "Message(sent: {}, deliver: {}, {})", msg.sent, msg.deliver, msg.msg);
     }
 }
 
@@ -40,6 +42,7 @@ impl Environment {
             for peer in l.iter() {
                 if *peer != from {
                     let m = SimMessage {
+                        sent: self.clock,
                         deliver: self.clock + self.timing.network_latency(from, *peer),
                         msg: Message {
                             from: from,
@@ -51,9 +54,11 @@ impl Environment {
                 }
             }
         }
+        extra::sort::quick_sort(self.network, |x,y| x.deliver <= y.deliver)
     }
     pub fn reply(&mut self, request: &Message, response_body: &MessageBody) {
         let m = SimMessage {
+            sent: self.clock,
             deliver: self.clock + self.timing.network_latency(request.to, request.from),
             msg: Message {
                 from: request.to,
@@ -62,6 +67,7 @@ impl Environment {
             },
         };
         self.network.push(m);
+        extra::sort::quick_sort(self.network, |x,y| x.deliver <= y.deliver)
     }
     pub fn get_ready_messages(&mut self, out: &mut ~[Message]) {
         let mut i = 0;
@@ -72,6 +78,7 @@ impl Environment {
                 i += 1;
             }
         }
+        extra::sort::quick_sort(self.network, |x,y| x.deliver <= y.deliver)
     }
 
     fn next_tick(&self) -> Time {
@@ -210,6 +217,12 @@ pub fn simulate(cluster_policy: &str,
     let mut end = None;
     let mut ready_msgs = ~[]; // declared out here to avoid mallocs
     let mut next_tick = Time(0);
+
+    let mut last_tick_server_strs = ~[];
+    do cluster.len().times {
+        last_tick_server_strs.push(~"");
+    }
+
     while end.is_none() {
 
         env.clock = next_tick;
@@ -239,12 +252,21 @@ pub fn simulate(cluster_policy: &str,
 
         if trace {
             println!("Tick: {}", env.clock);
-            for server in cluster.iter() {
-                println!("{}", *server);
+            for (server, last) in cluster.iter().zip(last_tick_server_strs.mut_iter()) {
+                let s = format!("{}", *server);
+                if (*last != s) {
+                    println!("{} *", s);
+                } else {
+                    println!("{}", s);
+                }
+                *last = s;
             }
-            // Stack overflow?
             for message in env.network.iter() {
-                println!("{}", *message);
+                if message.sent == env.clock {
+                    println!("{} *", *message);
+                } else {
+                    println!("{}", *message);
+                }
             }
             println!("");
         }

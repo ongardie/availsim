@@ -36,7 +36,7 @@ impl fmt::Default for Index {
 }
 
 
-#[deriving(Ord, Clone)]
+#[deriving(Eq, Ord, Clone)]
 pub struct Time(uint);
 
 // An integer big enough to represent infinity in the simulations, but small
