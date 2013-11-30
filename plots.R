@@ -30,19 +30,19 @@ plotwd <- function() {
     g <- {}
 
     g$johncdf <- ggplot(run) + gtheme +
-           stat_ecdf(aes(x=election_time)) +
+           stat_ecdf(aes(x=election_time/1e6)) +
            scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
                               trans=reverselog_trans(10)) +
-           expand_limits(x=c(0, 1000)) +
-           xlab('Election Time') +
+           expand_limits(x=c(0, 1)) +
+           xlab('Election Time (s)') +
            ylab('Cumulative Fraction') +
-           geom_vline(xintercept = 1000)
+           geom_vline(xintercept = 1)
 
 
     g$cdf <- ggplot(run) + gtheme +
-           stat_ecdf(aes(x=election_time)) +
-           coord_cartesian(x=c(0, 1000)) +
-           xlab('Election Time') +
+           stat_ecdf(aes(x=election_time/1e6)) +
+           coord_cartesian(x=c(0, 1)) +
+           xlab('Election Time (s)') +
            ylab('Cumulative Fraction')
 
     ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=title),

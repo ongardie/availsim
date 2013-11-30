@@ -110,14 +110,14 @@ pub fn make(name: &str) -> ~TimingPolicy {
     return match name {
         "Delay1pct" => ~Stochastic {
             afrac: 0.99,
-            a: ~Uniform(2, 5) as ~TimingPolicy,
-            b: ~Uniform(5, 100) as ~TimingPolicy,
+            a: ~Uniform(2000, 5000) as ~TimingPolicy,
+            b: ~Uniform(5000, 100000) as ~TimingPolicy,
         } as ~TimingPolicy,
         "Down" => ~Uniform(INFINITY, INFINITY)
         as ~TimingPolicy,
-        "LAN" => ~Uniform(2, 5)
+        "LAN" => ~Uniform(2000, 5000)
         as ~TimingPolicy,
-        "WAN" => ~Uniform(30, 70)
+        "WAN" => ~Uniform(30000, 70000)
         as ~TimingPolicy,
         "P1" => ~Partitions(~[
                     partition!(Down: 1),

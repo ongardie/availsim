@@ -97,7 +97,7 @@ fn main() {
         println!("-h, --help       Print this help message");
         println!("--logs=POLICY    Log length policy (default same)");
         println!("--maxticks=N     Number of simulation ticks after which ");
-        println!("                 to stop a sample (default 5000)");
+        println!("                 to stop a sample (default 5,000,000)");
         println!("--samples=N      Number of simulations (default 10,000)");
         println!("--tasks=N        Number of parallel jobs (default {})",
                  std::rt::default_sched_threads() - 1);
@@ -135,7 +135,7 @@ fn main() {
                 fail!(format!("Couldn't parse max number of ticks from '{}'", s));
             },
         }},
-        None => { Time(5000) },
+        None => { Time(5000000) },
     };
     let num_samples : uint = match matches.opt_str("samples") {
         Some(s) => { match std::from_str::from_str(s) {

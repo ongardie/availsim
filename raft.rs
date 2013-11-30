@@ -202,7 +202,7 @@ impl Server {
             config: config,
             algorithm: algorithm.into_owned(),
             term: Term(0),
-            state: Follower { timer: env.make_time(150, 299) },
+            state: Follower { timer: env.make_time(150000, 299999) },
             lastLogIndex: Index(0),
             vote: None,
         }
@@ -221,7 +221,7 @@ impl Server {
             self.vote = None;
         }
         self.state = Candidate {
-            timer: env.make_time(150, 299),
+            timer: env.make_time(150000, 299999),
             votes: newHashSet([self.id]),
             should_retry: match self.algorithm {
                 ~"hesitant"  => false,
@@ -258,7 +258,7 @@ impl Server {
                         *heartbeat_seqno += 1;
                         acks.clear();
                         acks.insert(self.id);
-                        *timer = env.make_time(75, 75);
+                        *timer = env.make_time(75000, 75000);
                         env.multicast(self.id, &self.config, &AppendEntriesRequest {
                             term: self.term,
                             seqno: *heartbeat_seqno,
@@ -291,7 +291,7 @@ impl Server {
         let t = match self.state {
             Follower { timer, _ } => timer,
             Candidate { timer, _ } => timer,
-            Leader{_} => env.make_time(150, 299),
+            Leader{_} => env.make_time(150000, 299999),
         };
         self.term = term;
         self.vote = None;
@@ -308,7 +308,7 @@ impl Server {
         };
         if become_leader {
             self.state = Leader {
-                timer: env.make_time(75, 75),
+                timer: env.make_time(75000, 75000),
                 heartbeat_seqno: 0,
                 acks: newHashSet([self.id]),
                 start_time: env.clock,
@@ -359,7 +359,7 @@ impl Server {
                                 self.vote = Some(msg.from);
                                 match self.state {
                                     Follower { timer: ref mut timer, _ } =>
-                                        *timer = env.make_time(150, 299),
+                                        *timer = env.make_time(150000, 299999),
                                     _ => {},
                                 }
                                 reply(GRANTED);
@@ -441,7 +441,7 @@ impl Server {
             AppendEntriesRequest {term, seqno} => {
                 if term == self.term {
                     self.state = Follower {
-                        timer: env.make_time(150, 299),
+                        timer: env.make_time(150000, 299999),
                     };
                 } else if term > self.term {
                     self.step_down(env, term);
