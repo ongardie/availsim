@@ -1,6 +1,7 @@
 #[feature(globs)];
 extern mod std;
 extern mod extra;
+
 use basics::*;
 use policies::TimingPolicy;
 use raft::{Message, MessageBody, Configuration, Server};
@@ -202,17 +203,23 @@ impl Cluster {
     }
 }
 
-pub fn simulate(cluster_policy: &str,
-                timing_policy: ~TimingPolicy,
-                log_lengths: &str,
-                algorithm: &str,
-                terms: &str,
-                max_ticks: Time,
-                trace: bool) -> Time {
+#[deriving(Clone)]
+pub struct SimOpts {
+    cluster: ~str,
+    timing: ~str,
+    log_length: ~str,
+    algorithm: ~str,
+    terms: ~str,
+    max_ticks: Time,
+    trace: bool,
+}
+
+pub fn simulate(opts: &SimOpts) -> Time {
+    let timing_policy = ::policies::make(opts.timing);
     let env = &mut Environment::new(timing_policy);
-    let mut cluster = Cluster::new(env, cluster_policy, algorithm);
-    cluster.set_log_lengths(log_lengths);
-    cluster.set_terms(terms);
+    let mut cluster = Cluster::new(env, opts.cluster, opts.algorithm);
+    cluster.set_log_lengths(opts.log_length);
+    cluster.set_terms(opts.terms);
 
     let mut end = None;
     let mut ready_msgs = ~[]; // declared out here to avoid mallocs
@@ -228,8 +235,8 @@ pub fn simulate(cluster_policy: &str,
         env.clock = next_tick;
         next_tick = NEVER;
 
-        if env.clock >= max_ticks {
-            end = Some(max_ticks);
+        if env.clock >= opts.max_ticks {
+            end = Some(opts.max_ticks);
             break;
         }
         for server in cluster.mut_iter() {
@@ -250,7 +257,7 @@ pub fn simulate(cluster_policy: &str,
             }
         }
 
-        if trace {
+        if opts.trace {
             println!("Tick: {}", env.clock);
             for (server, last) in cluster.iter().zip(last_tick_server_strs.mut_iter()) {
                 let s = format!("{}", *server);
