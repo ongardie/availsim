@@ -1,9 +1,16 @@
+extern mod std;
+
 use std::fmt;
-use std::rand;
 use std::hashmap::HashSet;
 
 pub fn randrange(min : uint, max : uint) -> uint {
-    min + rand::random::<uint>() % (max - min + 1)
+    use std::rand::distributions::{IndependentSample, Range};
+    if min == max {
+        min
+    } else {
+        let range = Range::new(min, max);
+        range.ind_sample(std::rand::task_rng())
+    }
 }
 
 #[deriving(Eq, IterBytes, Clone, Ord)]
