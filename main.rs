@@ -83,7 +83,9 @@ fn main() {
         getopts::optopt("terms"),
         getopts::optopt("timeout"),
         getopts::optopt("timing"),
-        getopts::optflag("trace"),
+        getopts::optopt("trace"),
+        getopts::optopt("tracemin"),
+        getopts::optopt("tracemax"),
     ];
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => { m },
@@ -104,7 +106,10 @@ fn main() {
         println!("--timeout=MS     Milliseconds after which to stop");
         println!("                 (default 0 meaning infinity)");
         println!("--timing=POLICY  Network timing policy (default LAN)");
-        println!("--trace          Dump simulation trace to stdout");
+        /* TODO: trace interface is really hacky right now */
+        println!("--trace=FILE     Dump simulation trace to FILE");
+        println!("--tracemin=N     Keep only simulation traces at least N ticks long");
+        println!("--tracemax=N     Keep only simulation traces at most N ticks long");
     };
     if matches.opt_present("h") || matches.opt_present("help") {
         usage();
@@ -179,7 +184,27 @@ fn main() {
         Some(s) => { s },
         None => { ~"LAN" },
     };
-    let trace : bool = matches.opt_present("trace");
+    let trace : Option<~str> = matches.opt_str("trace");
+    let tracemin : Time = match matches.opt_str("tracemin") {
+        Some(s) => { match std::from_str::from_str(s) {
+            Some(i) => { Time(i) },
+            None => {
+                usage();
+                fail!(format!("Couldn't parse tracemin from '{}'", s));
+            },
+        }},
+        None => Time(0),
+    };
+    let tracemax : Time = match matches.opt_str("tracemax") {
+        Some(s) => { match std::from_str::from_str(s) {
+            Some(i) => { Time(i) },
+            None => {
+                usage();
+                fail!(format!("Couldn't parse tracemax from '{}'", s));
+            },
+        }},
+        None => NEVER,
+    };
 
     let mut meta : ~[(~str, ~str)] = ~[];
     meta.push((~"algorithm",  algorithm.clone()));
@@ -215,6 +240,8 @@ fn main() {
        terms: terms,
        max_ticks: max_ticks,
        trace: trace,
+       tracemin: tracemin,
+       tracemax: tracemax,
     };
     let samples = if num_tasks <= 1 {
         run_task(num_samples, &sim_opts, &signals.port)
@@ -319,6 +346,9 @@ fn run_task<T: Send>(n: uint, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Tim
         }
         let sample = sim::simulate(opts);
         samples.push(sample);
+        if (opts.trace.is_some() && opts.tracemin <= sample && sample <= opts.tracemax) {
+            break;
+        }
     }
     extra::sort::tim_sort(samples);
     return samples;

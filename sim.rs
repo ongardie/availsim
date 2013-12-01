@@ -211,10 +211,19 @@ pub struct SimOpts {
     algorithm: ~str,
     terms: ~str,
     max_ticks: Time,
-    trace: bool,
+    trace: Option<~str>,
+    tracemin: Time,
+    tracemax: Time,
 }
 
 pub fn simulate(opts: &SimOpts) -> Time {
+
+    let mut tracefile = match opts.trace {
+        Some(ref path) => std::io::File::create(&std::path::posix::Path::new(path.clone())),
+        None       => None,
+    };
+
+
     let timing_policy = ::policies::make(opts.timing);
     let env = &mut Environment::new(timing_policy);
     let mut cluster = Cluster::new(env, opts.cluster, opts.algorithm);
@@ -257,25 +266,29 @@ pub fn simulate(opts: &SimOpts) -> Time {
             }
         }
 
-        if opts.trace {
-            println!("Tick: {}", env.clock);
-            for (server, last) in cluster.iter().zip(last_tick_server_strs.mut_iter()) {
-                let s = format!("{}", *server);
-                if (*last != s) {
-                    println!("{} *", s);
-                } else {
-                    println!("{}", s);
+        match tracefile {
+            Some(ref mut f) => {
+                let w = f as &mut Writer;
+                writeln!(w, "Tick: {}", env.clock);
+                for (server, last) in cluster.iter().zip(last_tick_server_strs.mut_iter()) {
+                    let s = format!("{}", *server);
+                    if (*last != s) {
+                        writeln!(w, "{} *", s);
+                    } else {
+                        writeln!(w, "{}", s);
+                    }
+                    *last = s;
                 }
-                *last = s;
-            }
-            for message in env.network.iter() {
-                if message.sent == env.clock {
-                    println!("{} *", *message);
-                } else {
-                    println!("{}", *message);
+                for message in env.network.iter() {
+                    if message.sent == env.clock {
+                        writeln!(w, "{} *", *message);
+                    } else {
+                        writeln!(w, "{}", *message);
+                    }
                 }
-            }
-            println!("");
+                writeln!(w, "");
+            },
+            None => {},
         }
 
         next_tick = std::cmp::min(next_tick, env.next_tick());
