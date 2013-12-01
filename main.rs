@@ -83,6 +83,8 @@ fn main() {
         getopts::optopt("terms"),
         getopts::optopt("timeout"),
         getopts::optopt("timing"),
+
+        getopts::optopt("events"),
         getopts::optopt("trace"),
         getopts::optopt("tracemin"),
         getopts::optopt("tracemax"),
@@ -107,6 +109,7 @@ fn main() {
         println!("                 (default 0 meaning infinity)");
         println!("--timing=POLICY  Network timing policy (default LAN)");
         /* TODO: trace interface is really hacky right now */
+        println!("--events=FILE    Dump simulation events to FILE");
         println!("--trace=FILE     Dump simulation trace to FILE");
         println!("--tracemin=N     Keep only simulation traces at least N ticks long");
         println!("--tracemax=N     Keep only simulation traces at most N ticks long");
@@ -184,6 +187,7 @@ fn main() {
         Some(s) => { s },
         None => { ~"LAN" },
     };
+    let events : Option<~str> = matches.opt_str("events");
     let trace : Option<~str> = matches.opt_str("trace");
     let tracemin : Time = match matches.opt_str("tracemin") {
         Some(s) => { match std::from_str::from_str(s) {
@@ -239,6 +243,7 @@ fn main() {
        algorithm: algorithm,
        terms: terms,
        max_ticks: max_ticks,
+       events: events,
        trace: trace,
        tracemin: tracemin,
        tracemax: tracemax,
@@ -346,7 +351,8 @@ fn run_task<T: Send>(n: uint, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Tim
         }
         let sample = sim::simulate(opts);
         samples.push(sample);
-        if (opts.trace.is_some() && opts.tracemin <= sample && sample <= opts.tracemax) {
+        if ((opts.events.is_some() || opts.trace.is_some()) &&
+            opts.tracemin <= sample && sample <= opts.tracemax) {
             break;
         }
     }

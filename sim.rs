@@ -211,6 +211,7 @@ pub struct SimOpts {
     algorithm: ~str,
     terms: ~str,
     max_ticks: Time,
+    events: Option<~str>,
     trace: Option<~str>,
     tracemin: Time,
     tracemax: Time,
@@ -218,11 +219,22 @@ pub struct SimOpts {
 
 pub fn simulate(opts: &SimOpts) -> Time {
 
+    let mut eventsfile = match opts.events {
+        Some(ref path) => std::io::File::create(&std::path::posix::Path::new(path.clone())),
+        None       => None,
+    };
     let mut tracefile = match opts.trace {
         Some(ref path) => std::io::File::create(&std::path::posix::Path::new(path.clone())),
         None       => None,
     };
 
+    match eventsfile {
+        Some(ref mut f) => {
+            let w = f as &mut Writer;
+            writeln!(w, "time,server,state,term");
+        },
+        None => {},
+    }
 
     let timing_policy = ::policies::make(opts.timing);
     let env = &mut Environment::new(timing_policy);
@@ -235,8 +247,10 @@ pub fn simulate(opts: &SimOpts) -> Time {
     let mut next_tick = Time(0);
 
     let mut last_tick_server_strs = ~[];
+    let mut last_tick_server_states = ~[];
     do cluster.len().times {
         last_tick_server_strs.push(~"");
+        last_tick_server_states.push(('_', Term(0)));
     }
 
     while end.is_none() {
@@ -287,6 +301,20 @@ pub fn simulate(opts: &SimOpts) -> Time {
                     }
                 }
                 writeln!(w, "");
+            },
+            None => {},
+        }
+
+        match eventsfile {
+            Some(ref mut f) => {
+                let w = f as &mut Writer;
+                for (server, last) in cluster.iter().zip(last_tick_server_states.mut_iter()) {
+                    let s = (server.state.to_char(), server.term);
+                    if (*last != s) {
+                        writeln!(w, "{},{},{},{}", env.clock, server.id, s.first(), s.second());
+                    }
+                    *last = s;
+                }
             },
             None => {},
         }

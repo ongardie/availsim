@@ -104,6 +104,16 @@ enum ServerState {
     },
 }
 
+impl ServerState {
+    pub fn to_char(&self) -> char {
+        match *self {
+            Follower {_}  => 'F',
+            Candidate {_} => 'C',
+            Leader {_}    => 'L',
+        }
+    }
+}
+
 impl fmt::Default for HashSet<ServerID> {
     fn fmt(set: &HashSet<ServerID>, f: &mut fmt::Formatter) {
         write!(f.buf, "\\{");

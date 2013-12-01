@@ -23,7 +23,7 @@ impl fmt::Default for ServerID {
 }
 
 
-#[deriving(Eq, Ord)]
+#[deriving(Eq, Ord, Clone)]
 pub struct Term(uint);
 
 impl fmt::Default for Term {
