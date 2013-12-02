@@ -221,7 +221,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
             std::io::File::create(&std::path::posix::Path::new(name))
         };
         (c(format!("events{:06u}.csv", run)),
-         c(format!("trace{:06u}", run)))
+         c(format!("trace{:06u}.html", run)))
     } else {
         (None, None)
     };
@@ -281,11 +281,13 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         match tracefile {
             Some(ref mut f) => {
                 let w = f as &mut Writer;
-                writeln!(w, "Tick: {}", env.clock);
+                writeln!(w, "<div class=\"list-group-item\">");
+                writeln!(w, "<h4>{:0.03f} ms</h4>", (*env.clock as f64) / 1000.0);
+                writeln!(w, "<pre>");
                 for (server, last) in cluster.iter().zip(last_tick_server_strs.mut_iter()) {
                     let s = format!("{}", *server);
                     if (*last != s) {
-                        writeln!(w, "{} *", s);
+                        writeln!(w, "<span class=\"new\">{}</span>", s);
                     } else {
                         writeln!(w, "{}", s);
                     }
@@ -293,11 +295,13 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
                 }
                 for message in env.network.iter() {
                     if message.sent == env.clock {
-                        writeln!(w, "{} *", *message);
+                        writeln!(w, "<span class=\"new\">{}</span>", *message);
                     } else {
                         writeln!(w, "{}", *message);
                     }
                 }
+                writeln!(w, "</pre>");
+                writeln!(w, "</div>");
                 writeln!(w, "");
             },
             None => {},

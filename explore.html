@@ -12,6 +12,14 @@
 .m10 {
   margin: 10px auto 10px auto;
 }
+#fulltrace pre {
+  overflow-x: scroll;
+  white-space: pre;
+  word-wrap: normal;
+}
+#fulltrace pre span.new {
+  color:green;
+}
 </style>
 </head>
 <body>
@@ -60,6 +68,9 @@
 <input id="pin" type="button" value="Pin" />
 <div id="runs"></div>
 <img id="timeline" src="" />
+<div id="fulltrace" class="list-group"></div>
+
+</div>
 
 <div id="pinned"></div>
 

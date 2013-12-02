@@ -182,6 +182,14 @@ form.submit(function() {
               .prop('href', '')
               .append((row.election_time / 1e3).toFixed(0))
               .click(function() {
+                fs.readFile(dir + '/trace' + zeropad(6, row.run.toString()) + '.html',
+                            {encoding: 'utf8', flag: 'r'},
+                            function (err, data) {
+                  if (err)
+                    console.log(err);
+                  console.log(data);
+                  $('#fulltrace').html('' + data);
+                });
                 submitPlot(dir, 'timeline(' + row.run + ')', function() {
                   console.log('R done');
                   $('#timeline').prop('src', dir + '/timeline' + zeropad(6, row.run.toString()) + '.svg');

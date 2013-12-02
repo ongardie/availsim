@@ -59,7 +59,8 @@ timeline <- function(run) {
     g <- {}
 
     g$timeline <- ggplot(events) + gtheme +
-           geom_point(aes(x=time/1e3, y=server, color=state)) +
+           geom_point(aes(x=time/1e3, y=server, color=state, shape=state),
+                      size=3) +
            geom_text(aes(x=time/1e3, y=server+.1, label=term), vjust=0) +
            xlab('Time (ms)') +
            ylab('Server')
