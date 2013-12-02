@@ -188,7 +188,6 @@ form.submit(function() {
                             function (err, data) {
                   if (err)
                     console.log(err);
-                  console.log(data);
                   $('#fulltrace').html('' + data);
                 });
                 submitPlot(dir, 'timeline(' + row.run + ')', function() {
