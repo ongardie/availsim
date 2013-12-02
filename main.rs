@@ -226,7 +226,7 @@ fn main() {
        trace: trace,
     };
     let samples = if num_tasks <= 1 {
-        run_task(range(0, num_samples), &sim_opts, &signals.port)
+        run_task(std::iter::range_step(0, num_samples, 1), &sim_opts, &signals.port)
     } else {
         let (mut port, chan): (std::comm::Port<~[Sample]>, std::comm::Chan<~[Sample]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
@@ -242,12 +242,7 @@ fn main() {
             let child_chan = chan.clone();
             let child_opts = sim_opts.clone();
             do spawn {
-                let runs = range(num_samples / num_tasks * tid,
-                                 if tid == num_tasks - 1 {
-                                     num_samples // get odd tasks left over
-                                 } else {
-                                     num_samples / num_tasks * (tid + 1)
-                                 });
+                let runs = std::iter::range_step(tid, num_samples, num_tasks);
                 child_chan.send(run_task(runs, &child_opts, &exit_port));
             }
         }
@@ -329,7 +324,7 @@ fn sort_samples(samples: &mut [Sample]) {
     extra::sort::quick_sort(samples, |x,y| x.ticks <= y.ticks);
 }
 
-fn run_task<T: Send>(mut runs: std::iter::Range<uint>, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Sample] {
+fn run_task<T: Send>(mut runs: std::iter::RangeStep<uint>, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Sample] {
     let mut samples = ~[];
     samples.reserve(runs.size_hint().first());
     for run in runs {
