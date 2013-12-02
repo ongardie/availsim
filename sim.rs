@@ -211,21 +211,19 @@ pub struct SimOpts {
     algorithm: ~str,
     terms: ~str,
     max_ticks: Time,
-    events: Option<~str>,
-    trace: Option<~str>,
-    tracemin: Time,
-    tracemax: Time,
+    trace: uint,
 }
 
-pub fn simulate(opts: &SimOpts) -> Time {
+pub fn simulate(run: uint, opts: &SimOpts) -> Time {
 
-    let mut eventsfile = match opts.events {
-        Some(ref path) => std::io::File::create(&std::path::posix::Path::new(path.clone())),
-        None       => None,
-    };
-    let mut tracefile = match opts.trace {
-        Some(ref path) => std::io::File::create(&std::path::posix::Path::new(path.clone())),
-        None       => None,
+    let (mut eventsfile, mut tracefile) = if run < opts.trace {
+        let c = |name: ~str| {
+            std::io::File::create(&std::path::posix::Path::new(name))
+        };
+        (c(format!("events{:02u}.csv", run)),
+         c(format!("trace{:02u}", run)))
+    } else {
+        (None, None)
     };
 
     match eventsfile {

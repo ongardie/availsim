@@ -83,11 +83,7 @@ fn main() {
         getopts::optopt("terms"),
         getopts::optopt("timeout"),
         getopts::optopt("timing"),
-
-        getopts::optopt("events"),
         getopts::optopt("trace"),
-        getopts::optopt("tracemin"),
-        getopts::optopt("tracemax"),
     ];
     let matches = match getopts::getopts(args.tail(), opts) {
         Ok(m) => { m },
@@ -108,11 +104,7 @@ fn main() {
         println!("--timeout=MS     Milliseconds after which to stop");
         println!("                 (default 0 meaning infinity)");
         println!("--timing=POLICY  Network timing policy (default LAN)");
-        /* TODO: trace interface is really hacky right now */
-        println!("--events=FILE    Dump simulation events to FILE");
-        println!("--trace=FILE     Dump simulation trace to FILE");
-        println!("--tracemin=N     Keep only simulation traces at least N ticks long");
-        println!("--tracemax=N     Keep only simulation traces at most N ticks long");
+        println!("--trace=N         Dump N simulation traces to files (default 0)");
     };
     if matches.opt_present("h") || matches.opt_present("help") {
         usage();
@@ -187,27 +179,15 @@ fn main() {
         Some(s) => { s },
         None => { ~"LAN" },
     };
-    let events : Option<~str> = matches.opt_str("events");
-    let trace : Option<~str> = matches.opt_str("trace");
-    let tracemin : Time = match matches.opt_str("tracemin") {
+    let trace : uint = match matches.opt_str("trace") {
         Some(s) => { match std::from_str::from_str(s) {
-            Some(i) => { Time(i) },
+            Some(i) => { i },
             None => {
                 usage();
-                fail!(format!("Couldn't parse tracemin from '{}'", s));
+                fail!(format!("Couldn't parse number of traces from '{}'", s));
             },
         }},
-        None => Time(0),
-    };
-    let tracemax : Time = match matches.opt_str("tracemax") {
-        Some(s) => { match std::from_str::from_str(s) {
-            Some(i) => { Time(i) },
-            None => {
-                usage();
-                fail!(format!("Couldn't parse tracemax from '{}'", s));
-            },
-        }},
-        None => NEVER,
+        None => { 0 },
     };
 
     let mut meta : ~[(~str, ~str)] = ~[];
@@ -243,15 +223,12 @@ fn main() {
        algorithm: algorithm,
        terms: terms,
        max_ticks: max_ticks,
-       events: events,
        trace: trace,
-       tracemin: tracemin,
-       tracemax: tracemax,
     };
     let samples = if num_tasks <= 1 {
-        run_task(num_samples, &sim_opts, &signals.port)
+        run_task(range(0, num_samples), &sim_opts, &signals.port)
     } else {
-        let (mut port, chan): (std::comm::Port<~[Time]>, std::comm::Chan<~[Time]>) = stream();
+        let (mut port, chan): (std::comm::Port<~[Sample]>, std::comm::Chan<~[Sample]>) = stream();
         let chan = std::comm::SharedChan::new(chan);
         let mut exit_chans : ~[std::comm::Chan<()>] = ~[];
         let exit = || {
@@ -265,13 +242,13 @@ fn main() {
             let child_chan = chan.clone();
             let child_opts = sim_opts.clone();
             do spawn {
-                let n = if tid == 0 {
-                    // get the odd one left over
-                    num_samples - (num_samples / num_tasks) * (num_tasks - 1)
-                } else {
-                    num_samples / num_tasks
-                };
-                child_chan.send(run_task(n, &child_opts, &exit_port));
+                let runs = range(num_samples / num_tasks * tid,
+                                 if tid == num_tasks - 1 {
+                                     num_samples // get odd tasks left over
+                                 } else {
+                                     num_samples / num_tasks * (tid + 1)
+                                 });
+                child_chan.send(run_task(runs, &child_opts, &exit_port));
             }
         }
 
@@ -307,7 +284,7 @@ fn main() {
                 }
             )
         }
-        extra::sort::tim_sort(samples);
+        sort_samples(samples);
         samples
     };
 
@@ -315,14 +292,14 @@ fn main() {
     let elapsed_ns = end_ns - start_ns;
     meta.push((~"wall",   format!("{}", elapsed_ns as f64 / 1e9)));
     meta.push((~"trials", format!("{}", samples.len())));
-    meta.push((~"min",    format!("{}", samples[0])));
-    meta.push((~"median", format!("{}", samples[samples.len()/2])));
-    meta.push((~"max",    format!("{}", samples[samples.len()-1])));
+    meta.push((~"min",    format!("{}", samples[0].ticks)));
+    meta.push((~"median", format!("{}", samples[samples.len()/2].ticks)));
+    meta.push((~"max",    format!("{}", samples[samples.len()-1].ticks)));
 
     println!("Trials:     {}",       samples.len());
-    println!("Min:        {} ticks", samples[0]);
-    println!("Median:     {} ticks", samples[samples.len()/2]);
-    println!("Max:        {} ticks", samples[samples.len()-1]);
+    println!("Min:        {} ticks", samples[0].ticks);
+    println!("Median:     {} ticks", samples[samples.len()/2].ticks);
+    println!("Max:        {} ticks", samples[samples.len()-1].ticks);
     println!("Wall:       {:.2f} s", elapsed_ns as f64 / 1e9);
 
     let metaf = &mut File::create(&Path::new("meta.csv")).unwrap() as &mut Writer;
@@ -336,26 +313,35 @@ fn main() {
     write!(metaf, "\n");
 
     let runf = &mut File::create(&Path::new("samples.csv")).unwrap() as &mut Writer;
-    writeln!(runf, "election_time");
+    writeln!(runf, "election_time,run");
     for sample in samples.iter() {
-        writeln!(runf, "{}", *sample);
+        writeln!(runf, "{},{}", sample.ticks, sample.run);
     }
 }
 
-fn run_task<T: Send>(n: uint, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Time] {
+#[deriving(Clone)]
+struct Sample {
+    run: uint,
+    ticks: Time,
+}
+
+fn sort_samples(samples: &mut [Sample]) {
+    extra::sort::quick_sort(samples, |x,y| x.ticks <= y.ticks);
+}
+
+fn run_task<T: Send>(mut runs: std::iter::Range<uint>, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Sample] {
     let mut samples = ~[];
-    samples.reserve(n);
-    for _ in range(0, n) {
+    samples.reserve(runs.size_hint().first());
+    for run in runs {
         if exit_port.peek() {
             return samples;
         }
-        let sample = sim::simulate(opts);
+        let sample = Sample {
+            run: run,
+            ticks: sim::simulate(run, opts),
+        };
         samples.push(sample);
-        if ((opts.events.is_some() || opts.trace.is_some()) &&
-            opts.tracemin <= sample && sample <= opts.tracemax) {
-            break;
-        }
     }
-    extra::sort::tim_sort(samples);
+    sort_samples(samples);
     return samples;
 }
