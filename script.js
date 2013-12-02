@@ -119,12 +119,14 @@ var zeropad = function(minlen, s) {
 }
 
 form.submit(function() {
+    var trace = $('#trace').val();
     var effargs = (args.val() +
                    getArg('logs') +
                    getArg('terms') +
                    getArg('timing') +
                    getArg('algorithm') +
-                   getArg('cluster'));
+                   getArg('cluster') +
+                   '--trace ' + trace + ' ');
     console.log(effargs);
 
     var sha1sum = crypto.createHash('sha1');
@@ -174,7 +176,7 @@ form.submit(function() {
         .to.array(function (data) {
           console.log("finished reading samples.csv");
           data.forEach(function (row) {
-            if (row.run >= 100) // TODO
+            if (row.run >= trace)
               return;
             var link = $('<a></a>')
               .prop('href', '')
