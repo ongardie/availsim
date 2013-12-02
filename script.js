@@ -2,7 +2,7 @@
 
 var fs = require('fs');
 var exec = require('child_process').exec;
-
+var csv = require('csv');
 
 var plotter = exec('R --no-save --interactive', {
   env: process.env,
@@ -19,9 +19,9 @@ plotter.stderr.on('data', function (data) {
   console.log('stderr: ' + data);
 });
 
-var submitPlot = function (dir, cb) {
+var submitPlot = function (dir, expr, cb) {
   plotter_cb_queue.push(cb);
-  plotter.stdin.write(dir + '\n');
+  plotter.stdin.write('setwd("' + dir + '"); ' + expr + ';\n');
 }
 
 
@@ -160,6 +160,35 @@ form.submit(function() {
       if (code != 0)
         return;
 
+      $('#runs').html('');
+      csv()
+        .from.path(dir + '/samples.csv', {
+          columns: true
+        })
+        .to.array(function (data) {
+          console.log("finished reading samples.csv");
+          data.forEach(function (row) {
+            if (row.run >= 100) // TODO
+              return;
+            var link = $('<a></a>')
+              .prop('href', '')
+              .append((row.election_time / 1e3).toFixed(0))
+              .click(function() {
+                submitPlot(dir, 'timeline(' + row.run + ')', function() {
+                  console.log('R done');
+                  $('#timeline').prop('src', dir + '/timeline.svg');
+                });
+                return false;
+              });
+            $('#runs').append(link).append(' ');
+          });
+        })
+        .transform(function(row){
+          row.election_time = parseInt(row.election_time);
+          row.run = parseInt(row.run);
+          return row;
+        });
+
       console.log('Running R');
       /*
       var plot = exec('Rscript ../../plots.R', {
@@ -181,7 +210,7 @@ form.submit(function() {
       });
       */
 
-      submitPlot(dir, function() {
+      submitPlot(dir, 'cdf()', function() {
         console.log('R done');
         $('#graph').prop('src', dir + '/Rplots.svg');
       });

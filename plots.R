@@ -17,7 +17,7 @@ gtheme <- theme_bw(base_size = 12, base_family = "") +
                 axis.title=element_text(size = rel(.8)),
                 plot.title=element_text(size = rel(.8)))
 
-plotwd <- function() {
+cdf <- function() {
 
     meta = read.csv('meta.csv')
     run = read.csv('samples.csv')
@@ -51,17 +51,33 @@ plotwd <- function() {
 
 }
 
+timeline <- function(run) {
+    events = read.csv(sprintf('events%06d.csv', run))
+    events$state = factor(events$state,
+                          levels=c('F', 'C', 'L'))
+
+    g <- {}
+
+    g$timeline <- ggplot(events) + gtheme +
+           geom_point(aes(x=time/1e3, y=server, color=state)) +
+           geom_text(aes(x=time/1e3, y=server+.1, label=term), vjust=0) +
+           xlab('Time (ms)') +
+           ylab('Server')
+    ggsave(plot=g$timeline,
+           filename='timeline.svg',
+           width=7, height=3.5)
+
+}
+
 if (exists('repl') && repl) {
     home <- getwd()
     while (TRUE) {
-        dir <- readline('dir: ')
-        if (dir != '') {
-            setwd(dir)
-            plotwd()
-            setwd(home)
-            write('--DONE--\n', '')
-        }
+        cmd <- readline('cmd: ')
+        eval(parse(text=cmd))
+        setwd(home)
+        write('--DONE--\n', '')
     }
 } else {
-    plotwd()
+    cdf()
 }
+

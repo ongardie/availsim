@@ -220,8 +220,8 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         let c = |name: ~str| {
             std::io::File::create(&std::path::posix::Path::new(name))
         };
-        (c(format!("events{:02u}.csv", run)),
-         c(format!("trace{:02u}", run)))
+        (c(format!("events{:06u}.csv", run)),
+         c(format!("trace{:06u}", run)))
     } else {
         (None, None)
     };
