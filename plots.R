@@ -64,7 +64,7 @@ timeline <- function(run) {
            xlab('Time (ms)') +
            ylab('Server')
     ggsave(plot=g$timeline,
-           filename='timeline.svg',
+           filename=sprintf('timeline%06d.svg', run),
            width=7, height=3.5)
 
 }

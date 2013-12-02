@@ -112,6 +112,12 @@ var getArg = function(name) {
     return ' --' + name + '=' + v + ' ';
 }
 
+var zeropad = function(minlen, s) {
+  while (s.length < minlen)
+    s = "0" + s;
+  return s;
+}
+
 form.submit(function() {
     var effargs = (args.val() +
                    getArg('logs') +
@@ -176,7 +182,7 @@ form.submit(function() {
               .click(function() {
                 submitPlot(dir, 'timeline(' + row.run + ')', function() {
                   console.log('R done');
-                  $('#timeline').prop('src', dir + '/timeline.svg');
+                  $('#timeline').prop('src', dir + '/timeline' + zeropad(6, row.run.toString()) + '.svg');
                 });
                 return false;
               });
