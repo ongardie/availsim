@@ -72,6 +72,7 @@ fill('algorithm', $('#algorithm'), [
   'hesitant',
   'hesitant2',
   'nograntnobump',
+  'stalelognobump',
   'zookeeper',
   'zookeeper2',
 ]);

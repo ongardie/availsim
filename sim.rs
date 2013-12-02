@@ -112,17 +112,17 @@ impl Cluster {
             "15" => Cluster::flat(env, 15, algorithm),
             "5-2+2" => {
                 let old = newHashSet([ServerID(1), ServerID(2), ServerID(3),
-                                      ServerID(6), ServerID(7)]);
-                let new = newHashSet([ServerID(1), ServerID(2), ServerID(3),
                                       ServerID(4), ServerID(5)]);
+                let new = newHashSet([ServerID(3), ServerID(4), ServerID(5),
+                                      ServerID(6), ServerID(7)]);
                 let mut servers = ~[];
-                servers.push(Server::new(ServerID(1), Configuration(~[new.clone()]), env, algorithm));
-                servers.push(Server::new(ServerID(2), Configuration(~[new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(1), Configuration(~[old.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(2), Configuration(~[old.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(3), Configuration(~[new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(4), Configuration(~[new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(5), Configuration(~[new.clone()]), env, algorithm));
-                servers.push(Server::new(ServerID(6), Configuration(~[old.clone()]), env, algorithm));
-                servers.push(Server::new(ServerID(7), Configuration(~[old.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(6), Configuration(~[new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(7), Configuration(~[new.clone()]), env, algorithm));
                 Cluster(servers)
             },
             _ => fail!("Unknown cluster policy: {}", policy)
@@ -161,7 +161,7 @@ impl Cluster {
                 std::rand::task_rng().shuffle_mut(lengths);
                 for (server, length) in self.mut_iter().zip(lengths.iter()) {
                     server.lastLogIndex = match server.id {
-                        ServerID(6) | ServerID(7) => Index(0),
+                        ServerID(1) | ServerID(2) => Index(0),
                         _ => Index(*length),
                     };
                 }
@@ -172,7 +172,7 @@ impl Cluster {
                 std::rand::task_rng().shuffle_mut(lengths);
                 for (server, length) in self.mut_iter().zip(lengths.iter()) {
                     server.lastLogIndex = match server.id {
-                        ServerID(4) | ServerID(5) | ServerID(6) | ServerID(7) => Index(0),
+                        ServerID(1) | ServerID(2) | ServerID(3) | ServerID(4) => Index(0),
                         _ => Index(*length),
                     };
                 }

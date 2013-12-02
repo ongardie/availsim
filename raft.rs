@@ -200,6 +200,7 @@ impl Server {
                algorithm: &str) -> Server {
         match algorithm {
             "nograntnobump" |
+            "stalelognobump" |
             "hesitant"      |
             "hesitant2"     |
             "zookeeper"     |
@@ -333,7 +334,7 @@ impl Server {
 
     pub fn stable_leader_start_time(&self) -> Option<Time> {
         match self.state {
-            Leader {heartbeat_seqno, start_time, _} if heartbeat_seqno > 4 => Some(start_time),
+            Leader {heartbeat_seqno, start_time, _} if heartbeat_seqno > 16 => Some(start_time),
             _ => None,
         }
     }
@@ -353,14 +354,21 @@ impl Server {
                 if term < self.term {
                     reply(TERM_STALE);
                 } else {
-                    if self.algorithm != ~"nograntnobump" && term > self.term {
-                        self.step_down(env, term);
+                    if term > self.term {
+                        match self.algorithm {
+                            ~"nograntnobump"  => {},
+                            ~"stalelognobump" => {},
+                            _ => self.step_down(env, term)
+                        }
                     }
                     // careful ordering to support algorithm hesitant:
                     // reply with LOG_STALE first
                     if lastLogIndex < self.lastLogIndex {
                         reply(LOG_STALE);
                     } else {
+                        if self.algorithm == ~"stalelognobump" && term > self.term {
+                            self.step_down(env, term);
+                        }
                         match self.vote {
                             None => {
                                 if self.algorithm == ~"nograntnobump" && term > self.term {

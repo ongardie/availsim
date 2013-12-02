@@ -12,8 +12,12 @@
 .m10 {
   margin: 10px auto 10px auto;
 }
+#fulltrace {
+  overflow: scroll;
+  height: 400px;
+}
 #fulltrace pre {
-  overflow-x: scroll;
+  /* overflow-x: scroll; */
   white-space: pre;
   word-wrap: normal;
 }
@@ -34,7 +38,7 @@
 
       <div class="input-group m10">
         <span class="input-group-addon">Args</span>
-        <input class="form-control" type="text" id="args" name="args" value="--timeout=200" />
+        <input class="form-control" type="text" id="args" name="args" value="--timeout=2000" />
       </div>
 
       <div class="input-group m10">
