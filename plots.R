@@ -61,12 +61,14 @@ timeline <- function(run) {
     g$timeline <- ggplot(events) + gtheme +
            geom_point(aes(x=time/1e3, y=server, color=state, shape=state),
                       size=3) +
-           geom_text(aes(x=time/1e3, y=server+.1, label=term), vjust=0) +
+           expand_limits(y=c(1,7)) +
+           scale_y_reverse(breaks=1:7) +
+           geom_text(aes(x=time/1e3, y=server-.5, label=term), vjust=1) +
            xlab('Time (ms)') +
            ylab('Server')
     ggsave(plot=g$timeline,
            filename=sprintf('timeline%06d.svg', run),
-           width=7, height=3.5)
+           width=10, height=3.5)
 
 }
 
