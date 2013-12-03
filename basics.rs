@@ -9,7 +9,7 @@ pub fn randrange(min : uint, max : uint) -> uint {
         min
     } else {
         let range = Range::new(min, max);
-        range.ind_sample(std::rand::task_rng())
+        range.ind_sample(&mut std::rand::task_rng())
     }
 }
 

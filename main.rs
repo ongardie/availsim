@@ -313,7 +313,7 @@ fn main() {
     println!("Max:        {} ticks", samples[samples.len()-1].ticks);
     println!("Wall:       {:.2f} s", elapsed_ns as f64 / 1e9);
 
-    let metaf = &mut File::create(&Path::new("meta.csv")).unwrap() as &mut Writer;
+    let metaf = &mut File::create(&Path::init("meta.csv")).unwrap() as &mut Writer;
     for &(ref k, ref _v) in meta.iter() {
         write!(metaf, "{}, ", *k);
     }
@@ -323,7 +323,7 @@ fn main() {
     }
     write!(metaf, "\n");
 
-    let runf = &mut File::create(&Path::new("samples.csv")).unwrap() as &mut Writer;
+    let runf = &mut File::create(&Path::init("samples.csv")).unwrap() as &mut Writer;
     let runf = &mut std::io::buffered::BufferedWriter::new(runf) as &mut Writer;
     writeln!(runf, "election_time,run");
     for sample in samples.iter() {

@@ -1,5 +1,3 @@
-#[feature(globs)];
-#[feature(struct_variant)];
 extern mod std;
 extern mod extra;
 
@@ -107,9 +105,9 @@ enum ServerState {
 impl ServerState {
     pub fn to_char(&self) -> char {
         match *self {
-            Follower {_}  => 'F',
-            Candidate {_} => 'C',
-            Leader {_}    => 'L',
+            Follower {..}  => 'F',
+            Candidate {..} => 'C',
+            Leader {..}    => 'L',
         }
     }
 }
@@ -165,7 +163,7 @@ struct Configuration(~[HashSet<ServerID>]);
 impl Configuration {
     fn is_quorum(&self, servers: &HashSet<ServerID>) -> bool {
         for c in self.iter() {
-            if c.intersection_iter(servers).len() <= c.len() / 2 {
+            if c.intersection(servers).len() <= c.len() / 2 {
                 return false;
             }
         }
@@ -253,17 +251,17 @@ impl Server {
         let mut need_step_down = false;
 
         match self.state {
-            Follower  {timer, _} => {
+            Follower  {timer, ..} => {
                 if timer <= env.clock {
                     self.start_new_election(env, None)
                 }
             }
-            Candidate {timer, should_retry, _} => {
+            Candidate {timer, should_retry, ..} => {
                 if timer <= env.clock && should_retry {
                     self.start_new_election(env, None)
                 }
             },
-            Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, _} => {
+            Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, ..} => {
                 if *timer <= env.clock {
                     if (self.config.is_quorum(acks)) {
                         *heartbeat_seqno += 1;
@@ -291,18 +289,18 @@ impl Server {
     pub fn next_tick(&self) -> Time {
         let mut r = NEVER;
         match self.state {
-            Follower { timer, _ }  => r = std::cmp::min(r, timer),
-            Candidate { timer, _ } => r = std::cmp::min(r, timer),
-            Leader { timer, _ }    => r = std::cmp::min(r, timer),
+            Follower { timer, .. }  => r = std::cmp::min(r, timer),
+            Candidate { timer, .. } => r = std::cmp::min(r, timer),
+            Leader { timer, .. }    => r = std::cmp::min(r, timer),
         }
         return r;
     }
 
     fn step_down(&mut self, env: &Environment, term: Term) {
         let t = match self.state {
-            Follower { timer, _ } => timer,
-            Candidate { timer, _ } => timer,
-            Leader{_} => env.make_time(150000, 299999),
+            Follower { timer, .. } => timer,
+            Candidate { timer, .. } => timer,
+            Leader{..} => env.make_time(150000, 299999),
         };
         self.term = term;
         self.vote = None;
@@ -313,9 +311,9 @@ impl Server {
 
     fn try_become_leader(&mut self, env: &mut Environment) {
         let become_leader = match self.state {
-            Follower {_} => false,
-            Candidate {votes: ref votes, _} => self.config.is_quorum(votes),
-            Leader {_} => false,
+            Follower {..} => false,
+            Candidate {votes: ref votes, ..} => self.config.is_quorum(votes),
+            Leader {..} => false,
         };
         if become_leader {
             self.state = Leader {
@@ -334,7 +332,7 @@ impl Server {
 
     pub fn stable_leader_start_time(&self, stable_req: uint) -> Option<Time> {
         match self.state {
-            Leader {heartbeat_seqno, start_time, _} => {
+            Leader {heartbeat_seqno, start_time, ..} => {
                 if heartbeat_seqno > stable_req {
                     Some(start_time)
                 } else {
@@ -382,7 +380,7 @@ impl Server {
                                 }
                                 self.vote = Some(msg.from);
                                 match self.state {
-                                    Follower { timer: ref mut timer, _ } =>
+                                    Follower { timer: ref mut timer, .. } =>
                                         *timer = env.make_time(150000, 299999),
                                     _ => {},
                                 }
@@ -398,7 +396,7 @@ impl Server {
             RequestVoteResponse {term, granted, logOk} => {
                 let msg_term = term;
                 let term = match self.state {
-                    Candidate {pre, _} => {
+                    Candidate {pre, ..} => {
                         if (term > self.term &&
                             pre &&
                             self.algorithm == ~"zookeeper2") {
@@ -412,13 +410,13 @@ impl Server {
                 if term == self.term {
                     let mut forceNewElectionTerm = None;
                     match self.state {
-                        Follower {_} => {},
+                        Follower {..} => {},
                         Candidate {votes: ref mut votes,
                                    should_retry: ref mut should_retry,
                                    pre: ref mut pre,
                                    max_term: ref mut max_term,
                                    endorsements: ref mut endorsements,
-                                   _} => {
+                                   ..} => {
                             if *pre {
                                 *max_term = std::cmp::max(*max_term, msg_term);
                                 if logOk {
@@ -451,7 +449,7 @@ impl Server {
                                 }
                             }
                         },
-                        Leader {_} => {},
+                        Leader {..} => {},
                     }
                     match forceNewElectionTerm {
                         Some(t) => self.start_new_election(env, Some(t)),
@@ -478,8 +476,8 @@ impl Server {
             AppendEntriesResponse {term, seqno} => {
                 if term == self.term {
                     match self.state {
-                        Follower {_} | Candidate {_} => {},
-                        Leader { heartbeat_seqno, acks: ref mut acks, _ } => {
+                        Follower {..} | Candidate {..} => {},
+                        Leader { heartbeat_seqno, acks: ref mut acks, .. } => {
                             if seqno == heartbeat_seqno {
                                 acks.insert(msg.from);
                             }

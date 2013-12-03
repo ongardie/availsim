@@ -1,4 +1,3 @@
-#[feature(globs)];
 extern mod std;
 extern mod extra;
 
@@ -218,7 +217,7 @@ pub struct SimOpts {
 pub fn simulate(run: uint, opts: &SimOpts) -> Time {
 
     let mut tracefile = if run < opts.trace {
-        let path = &std::path::posix::Path::new(format!("trace{:06u}.html", run));
+        let path = &std::path::posix::Path::init(format!("trace{:06u}.html", run));
         std::io::File::create(path)
     } else {
         None
@@ -238,7 +237,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
     };
 
     let mut eventsfile = if run < opts.trace {
-        let path = &std::path::posix::Path::new(format!("events{:06u}.csv", run));
+        let path = &std::path::posix::Path::init(format!("events{:06u}.csv", run));
         std::io::File::create(path)
     } else {
         None
@@ -277,7 +276,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
 
     let mut last_tick_server_strs = ~[];
     let mut last_tick_server_states = ~[];
-    do cluster.len().times {
+    for _ in range(0, cluster.len()) {
         last_tick_server_strs.push(~"");
         last_tick_server_states.push(('_', Term(0)));
     }

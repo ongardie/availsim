@@ -1,6 +1,3 @@
-#[feature(globs)];
-#[feature(macro_rules)];
-
 extern mod std;
 
 use basics::*;
@@ -30,7 +27,7 @@ impl TimingPolicy for Stochastic {
     fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
         use std::rand::distributions::{IndependentSample, Range};
         let range = Range::new(0.0, 1.0);
-        let sample = range.ind_sample(std::rand::task_rng());
+        let sample = range.ind_sample(&mut std::rand::task_rng());
         if sample < self.afrac {
             self.a.network_latency(from, to)
         } else {
