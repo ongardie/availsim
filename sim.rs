@@ -355,5 +355,14 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         }
 
     }
+    match eventswriter {
+        Some(ref mut w) => w.flush(),
+        None => {}
+    }
+    match tracewriter {
+        Some(ref mut w) => w.flush(),
+        None => {}
+    }
+
     return end.unwrap();
 }

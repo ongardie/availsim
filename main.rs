@@ -329,6 +329,7 @@ fn main() {
     for sample in samples.iter() {
         writeln!(runf, "{},{}", sample.ticks, sample.run);
     }
+    runf.flush();
 }
 
 #[deriving(Clone)]
