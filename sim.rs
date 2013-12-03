@@ -176,6 +176,17 @@ impl Cluster {
                     };
                 }
             },
+            "diff-13stale" => {
+                use std::rand::Rng;
+                let mut lengths = range(1, self.len() + 1).to_owned_vec();
+                std::rand::task_rng().shuffle_mut(lengths);
+                for (server, length) in self.mut_iter().zip(lengths.iter()) {
+                    server.lastLogIndex = match server.id {
+                        ServerID(1) | ServerID(3) => Index(0),
+                        _ => Index(*length),
+                    };
+                }
+            },
             _ => fail!("Unknown log length policy: {}", policy)
         }
     }
