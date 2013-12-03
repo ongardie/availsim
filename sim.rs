@@ -216,20 +216,50 @@ pub struct SimOpts {
 
 pub fn simulate(run: uint, opts: &SimOpts) -> Time {
 
-    let (mut eventsfile, mut tracefile) = if run < opts.trace {
-        let c = |name: ~str| {
-            std::io::File::create(&std::path::posix::Path::new(name))
-        };
-        (c(format!("events{:06u}.csv", run)),
-         c(format!("trace{:06u}.html", run)))
+    let mut tracefile = if run < opts.trace {
+        let path = &std::path::posix::Path::new(format!("trace{:06u}.html", run));
+        std::io::File::create(path)
     } else {
-        (None, None)
+        None
+    };
+    let mut tracebwriter = match tracefile {
+        Some(ref mut f) => {
+            let writer = f as &mut Writer;
+            Some(std::io::buffered::BufferedWriter::new(writer))
+        },
+        None => None,
+    };
+    let mut tracewriter = match tracebwriter {
+        Some(ref mut w) => {
+            Some(w as &mut Writer)
+        },
+        None => None,
     };
 
-    match eventsfile {
+    let mut eventsfile = if run < opts.trace {
+        let path = &std::path::posix::Path::new(format!("events{:06u}.csv", run));
+        std::io::File::create(path)
+    } else {
+        None
+    };
+    let mut eventsbwriter = match eventsfile {
         Some(ref mut f) => {
-            let w = f as &mut Writer;
-            writeln!(w, "time,server,state,term");
+            let writer = f as &mut Writer;
+            Some(std::io::buffered::BufferedWriter::new(writer))
+        },
+        None => None,
+    };
+    let mut eventswriter = match eventsbwriter {
+        Some(ref mut w) => {
+            Some(w as &mut Writer)
+        },
+        None => None,
+    };
+
+
+    match eventswriter {
+        Some(ref mut w) => {
+            writeln!(*w, "time,server,state,term");
         },
         None => {},
     }
@@ -278,42 +308,40 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
             }
         }
 
-        match tracefile {
-            Some(ref mut f) => {
-                let w = f as &mut Writer;
-                writeln!(w, "<div class=\"list-group-item\">");
-                writeln!(w, "<h4>{:0.03f} ms</h4>", (*env.clock as f64) / 1000.0);
-                writeln!(w, "<pre>");
+        match tracewriter {
+            Some(ref mut w) => {
+                writeln!(*w, "<div class=\"list-group-item\">");
+                writeln!(*w, "<h4>{:0.03f} ms</h4>", (*env.clock as f64) / 1000.0);
+                writeln!(*w, "<pre>");
                 for (server, last) in cluster.iter().zip(last_tick_server_strs.mut_iter()) {
                     let s = format!("{}", *server);
                     if (*last != s) {
-                        writeln!(w, "<span class=\"new\">{}</span>", s);
+                        writeln!(*w, "<span class=\"new\">{}</span>", s);
                     } else {
-                        writeln!(w, "{}", s);
+                        writeln!(*w, "{}", s);
                     }
                     *last = s;
                 }
                 for message in env.network.iter() {
                     if message.sent == env.clock {
-                        writeln!(w, "<span class=\"new\">{}</span>", *message);
+                        writeln!(*w, "<span class=\"new\">{}</span>", *message);
                     } else {
-                        writeln!(w, "{}", *message);
+                        writeln!(*w, "{}", *message);
                     }
                 }
-                writeln!(w, "</pre>");
-                writeln!(w, "</div>");
-                writeln!(w, "");
+                writeln!(*w, "</pre>");
+                writeln!(*w, "</div>");
+                writeln!(*w, "");
             },
             None => {},
         }
 
-        match eventsfile {
-            Some(ref mut f) => {
-                let w = f as &mut Writer;
+        match eventswriter {
+            Some(ref mut w) => {
                 for (server, last) in cluster.iter().zip(last_tick_server_states.mut_iter()) {
                     let s = (server.state.to_char(), server.term);
                     if (*last != s) {
-                        writeln!(w, "{},{},{},{}", env.clock, server.id, s.first(), s.second());
+                        writeln!(*w, "{},{},{},{}", env.clock, server.id, s.first(), s.second());
                     }
                     *last = s;
                 }

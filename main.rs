@@ -308,6 +308,7 @@ fn main() {
     write!(metaf, "\n");
 
     let runf = &mut File::create(&Path::new("samples.csv")).unwrap() as &mut Writer;
+    let runf = &mut std::io::buffered::BufferedWriter::new(runf) as &mut Writer;
     writeln!(runf, "election_time,run");
     for sample in samples.iter() {
         writeln!(runf, "{},{}", sample.ticks, sample.run);
