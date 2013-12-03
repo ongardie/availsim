@@ -23,8 +23,8 @@ cdf <- function() {
     run = read.csv('samples.csv')
 
     title <- with(meta,
-                sprintf('%s / %s / logs %s / terms %s / cluster %s / %s trials',
-                        algorithm, timing, log_length, terms, cluster,
+                sprintf('%s / %s / logs %s / terms %s /\ncluster %s / %d heartbeats / %s trials',
+                        algorithm, timing, log_length, terms, cluster, heartbeats,
                         format(trials, big.mark=',')))
 
     g <- {}
