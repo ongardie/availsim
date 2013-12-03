@@ -332,9 +332,15 @@ impl Server {
     }
 
 
-    pub fn stable_leader_start_time(&self) -> Option<Time> {
+    pub fn stable_leader_start_time(&self, stable_req: uint) -> Option<Time> {
         match self.state {
-            Leader {heartbeat_seqno, start_time, _} if heartbeat_seqno > 16 => Some(start_time),
+            Leader {heartbeat_seqno, start_time, _} => {
+                if heartbeat_seqno > stable_req {
+                    Some(start_time)
+                } else {
+                    None
+                }
+            },
             _ => None,
         }
     }

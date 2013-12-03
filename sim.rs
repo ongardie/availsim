@@ -206,6 +206,7 @@ impl Cluster {
 #[deriving(Clone)]
 pub struct SimOpts {
     cluster: ~str,
+    heartbeats: uint,
     timing: ~str,
     log_length: ~str,
     algorithm: ~str,
@@ -302,7 +303,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         ready_msgs.truncate(0);
 
         for server in cluster.iter() {
-            end = server.stable_leader_start_time();
+            end = server.stable_leader_start_time(opts.heartbeats);
             if end.is_some() {
                 break;
             }

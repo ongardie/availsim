@@ -76,6 +76,7 @@ fn main() {
         getopts::optflag("help"),
         getopts::optopt("algorithm"),
         getopts::optopt("cluster"),
+        getopts::optopt("heartbeats"),
         getopts::optopt("logs"),
         getopts::optopt("maxticks"),
         getopts::optopt("samples"),
@@ -94,6 +95,8 @@ fn main() {
         println!("--algorithm=ALGO Algorithm variant (default submission)");
         println!("--cluster=POLICY Type/size of cluster (default 5)");
         println!("-h, --help       Print this help message");
+        println!("--heartbeats=N   Number of heartbeats till leader ");
+        println!("                 considered stable (default 16)");
         println!("--logs=POLICY    Log length policy (default same)");
         println!("--maxticks=N     Number of simulation ticks after which ");
         println!("                 to stop a sample (default 5,000,000)");
@@ -121,6 +124,16 @@ fn main() {
     let cluster : ~str = match matches.opt_str("cluster") {
         Some(s) => { s },
         None => { ~"5" },
+    };
+    let heartbeats : uint = match matches.opt_str("heartbeats") {
+        Some(s) => { match std::from_str::from_str(s) {
+            Some(i) => { i },
+            None => {
+                usage();
+                fail!(format!("Couldn't parse number of heartbeats from '{}'", s));
+            },
+        }},
+        None => { 16 },
     };
     let log_length : ~str = match matches.opt_str("logs") {
         Some(s) => { s },
@@ -194,6 +207,7 @@ fn main() {
     meta.push((~"algorithm",  algorithm.clone()));
     meta.push((~"log_length", log_length.clone()));
     meta.push((~"cluster",    cluster.clone()));
+    meta.push((~"heartbeats", format!("{}", heartbeats)));
     meta.push((~"maxticks",   format!("{}", max_ticks)));
     meta.push((~"tasks",      format!("{}", num_tasks)));
     meta.push((~"terms",      terms.clone()));
@@ -203,6 +217,7 @@ fn main() {
 
     println!("Algorithm:  {}", algorithm)
     println!("Cluster:    {}", cluster)
+    println!("Heartbeats: {}", heartbeats)
     println!("Log length: {}", log_length)
     println!("Max ticks:  {}", max_ticks)
     println!("Tasks:      {}", num_tasks)
@@ -218,6 +233,7 @@ fn main() {
 
     let sim_opts = sim::SimOpts {
        cluster: cluster,
+       heartbeats: heartbeats,
        timing: timing,
        log_length: log_length,
        algorithm: algorithm,

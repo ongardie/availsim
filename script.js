@@ -121,13 +121,15 @@ var zeropad = function(minlen, s) {
 
 form.submit(function() {
     var trace = $('#trace').val();
+    var heartbeats = $('#heartbeats').val();
     var effargs = (args.val() +
                    getArg('logs') +
                    getArg('terms') +
                    getArg('timing') +
                    getArg('algorithm') +
                    getArg('cluster') +
-                   '--trace ' + trace + ' ');
+                   ('--trace ' + trace + ' ') +
+                   ('--heartbeats ' + heartbeats + ' '));
     console.log(effargs);
 
     var sha1sum = crypto.createHash('sha1');
