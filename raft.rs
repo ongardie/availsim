@@ -241,6 +241,7 @@ impl Server {
             max_term: Term(0),
             endorsements: newHashSet([self.id]),
         };
+        self.vote = Some(self.id);
         env.multicast(self.id, &self.config, &RequestVoteRequest {
             term: self.term,
             lastLogIndex: self.lastLogIndex,
