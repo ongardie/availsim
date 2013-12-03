@@ -295,7 +295,7 @@ fn main() {
                 }
             )
         }
-        sort_samples(samples);
+        sort_samples(&mut samples);
         samples
     };
 
@@ -337,8 +337,8 @@ struct Sample {
     ticks: Time,
 }
 
-fn sort_samples(samples: &mut [Sample]) {
-    extra::sort::quick_sort(samples, |x,y| x.ticks <= y.ticks);
+fn sort_samples(samples: &mut ~[Sample]) {
+    *samples = extra::sort::merge_sort(*samples, |x,y| x.ticks <= y.ticks);
 }
 
 fn run_task<T: Send>(mut runs: std::iter::RangeStep<uint>, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Sample] {
@@ -354,6 +354,6 @@ fn run_task<T: Send>(mut runs: std::iter::RangeStep<uint>, opts: &sim::SimOpts, 
         };
         samples.push(sample);
     }
-    sort_samples(samples);
+    sort_samples(&mut samples);
     return samples;
 }
