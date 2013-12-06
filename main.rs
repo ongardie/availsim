@@ -339,7 +339,7 @@ struct Sample {
 }
 
 fn sort_samples(samples: &mut ~[Sample]) {
-    *samples = extra::sort::merge_sort(*samples, |x,y| x.ticks <= y.ticks);
+    extra::sort::quick_sort(*samples, |x,y| x.ticks <= y.ticks);
 }
 
 fn run_task<T: Send>(mut runs: std::iter::RangeStep<uint>, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Sample] {

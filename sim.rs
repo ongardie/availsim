@@ -39,7 +39,7 @@ impl Environment {
         self.clock + randrange(min, max)
     }
     fn sort_network(&mut self) {
-        self.network = extra::sort::merge_sort(self.network, |x,y| x.deliver <= y.deliver);
+        extra::sort::quick_sort(self.network, |x,y| x.deliver <= y.deliver);
     }
     pub fn multicast(&mut self, from: ServerID, to: &Configuration, body: &MessageBody) {
         for l in to.iter() {
