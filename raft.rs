@@ -6,6 +6,7 @@ use std::fmt;
 use sim::Environment;
 use std::hashmap::HashSet;
 
+#[deriving(Clone)]
 pub struct Message {
     from: ServerID,
     to: ServerID,
@@ -21,7 +22,7 @@ impl fmt::Default for Message {
     }
 }
 
-#[deriving(Eq)]
+#[deriving(Eq, Clone)]
 enum VoteGranted {
     GRANTED,
     TERM_STALE,
@@ -41,6 +42,7 @@ impl fmt::Default for VoteGranted {
 }
 
 
+#[deriving(Clone)]
 pub enum MessageBody {
     RequestVoteRequest {
         term: Term,
@@ -89,6 +91,11 @@ enum ServerState {
     Candidate {
         timer: Time,
         votes: HashSet<ServerID>,
+        /**
+         * If true, when the timer fires, the candidate should start a new election.
+         * If false, when the timer fires, set a new timer.
+         * Always true for submission algo, but sometimes false in hesitant, hesitant2.
+         */
         should_retry: bool,
         pre: bool,
         max_term: Term,
@@ -257,11 +264,15 @@ impl Server {
                     self.start_new_election(env, None)
                 }
             }
-            Candidate {timer, should_retry, ..} => {
-                if timer <= env.clock && should_retry {
-                    self.start_new_election(env, None)
-                }
+            Candidate {timer, should_retry, ..}
+                if timer <= env.clock && should_retry => {
+                    self.start_new_election(env, None);
             },
+            Candidate {timer: ref mut timer, should_retry, ..}
+                if *timer <= env.clock && !should_retry => {
+                    *timer = env.make_time(150000, 299999);
+            },
+            Candidate {..} => {},
             Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, ..} => {
                 if *timer <= env.clock {
                     if (self.config.is_quorum(acks)) {

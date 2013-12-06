@@ -33,7 +33,7 @@ impl fmt::Default for Term {
 }
 
 
-#[deriving(Ord)]
+#[deriving(Ord, Clone)]
 pub struct Index(uint);
 
 impl fmt::Default for Index {

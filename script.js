@@ -53,7 +53,7 @@ fill('logs', $('#logs'), [
   'diff',
   'diff-oldstale',
   'diff-oldminstale',
-  'diff-13stale',
+  'diff-136stale',
 ]);
 
 fill('timing', $('#timing'), [
@@ -89,6 +89,8 @@ fill('cluster', $('#cluster'), [
   '7',
   '9',
   '5-2+2',
+  '1-5to3-7:1old2both3old4both5both6old7both',
+  '1-5to3-7:1old2both3old4new5new6old7new',
 ]);
 
 
