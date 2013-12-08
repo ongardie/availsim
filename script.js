@@ -58,11 +58,14 @@ fill('logs', $('#logs'), [
 
 fill('timing', $('#timing'), [
   'LAN',
+  'RAMCloud',
   'WAN',
   'Delay1pct',
   'Down',
   'P1',
+  'P1-RAMCloud',
   'P2',
+  'P2-RAMCloud',
   'L1',
   'Deian',
   'BadRecv',
