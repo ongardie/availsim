@@ -35,8 +35,8 @@ impl Environment {
             timing: timing,
         }
     }
-    pub fn make_time(&self, min: uint, max: uint) -> Time {
-        self.clock + randrange(min, max)
+    pub fn make_time(&self, range: (uint, uint)) -> Time {
+        self.clock + randrange(range.first(), range.second())
     }
     fn sort_network(&mut self) {
         extra::sort::quick_sort(self.network, |x,y| x.deliver <= y.deliver);

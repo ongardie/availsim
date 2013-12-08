@@ -6,6 +6,9 @@ use std::fmt;
 use sim::Environment;
 use std::hashmap::HashSet;
 
+static ELECTION_TIMEOUT : (uint, uint) = (150000, 299999);
+static HEARTBEAT_TIMEOUT : (uint, uint) = (75000, 75000);
+
 #[deriving(Clone)]
 pub struct Message {
     from: ServerID,
@@ -218,7 +221,7 @@ impl Server {
             config: config,
             algorithm: algorithm.into_owned(),
             term: Term(0),
-            state: Follower { timer: env.make_time(150000, 299999) },
+            state: Follower { timer: env.make_time(ELECTION_TIMEOUT) },
             lastLogIndex: Index(0),
             vote: None,
         }
@@ -237,7 +240,7 @@ impl Server {
             self.vote = None;
         }
         self.state = Candidate {
-            timer: env.make_time(150000, 299999),
+            timer: env.make_time(ELECTION_TIMEOUT),
             votes: newHashSet([self.id]),
             should_retry: match self.algorithm {
                 ~"hesitant"  => false,
@@ -270,7 +273,7 @@ impl Server {
             },
             Candidate {timer: ref mut timer, should_retry, ..}
                 if *timer <= env.clock && !should_retry => {
-                    *timer = env.make_time(150000, 299999);
+                    *timer = env.make_time(ELECTION_TIMEOUT);
             },
             Candidate {..} => {},
             Leader {timer: ref mut timer, heartbeat_seqno: ref mut heartbeat_seqno, acks: ref mut acks, ..} => {
@@ -279,7 +282,7 @@ impl Server {
                         *heartbeat_seqno += 1;
                         acks.clear();
                         acks.insert(self.id);
-                        *timer = env.make_time(75000, 75000);
+                        *timer = env.make_time(HEARTBEAT_TIMEOUT);
                         env.multicast(self.id, &self.config, &AppendEntriesRequest {
                             term: self.term,
                             seqno: *heartbeat_seqno,
@@ -312,7 +315,7 @@ impl Server {
         let t = match self.state {
             Follower { timer, .. } => timer,
             Candidate { timer, .. } => timer,
-            Leader{..} => env.make_time(150000, 299999),
+            Leader{..} => env.make_time(ELECTION_TIMEOUT),
         };
         self.term = term;
         self.vote = None;
@@ -329,7 +332,7 @@ impl Server {
         };
         if become_leader {
             self.state = Leader {
-                timer: env.make_time(75000, 75000),
+                timer: env.make_time(HEARTBEAT_TIMEOUT),
                 heartbeat_seqno: 0,
                 acks: newHashSet([self.id]),
                 start_time: env.clock,
@@ -393,7 +396,7 @@ impl Server {
                                 self.vote = Some(msg.from);
                                 match self.state {
                                     Follower { timer: ref mut timer, .. } =>
-                                        *timer = env.make_time(150000, 299999),
+                                        *timer = env.make_time(ELECTION_TIMEOUT),
                                     _ => {},
                                 }
                                 reply(GRANTED);
@@ -475,7 +478,7 @@ impl Server {
             AppendEntriesRequest {term, seqno} => {
                 if term == self.term {
                     self.state = Follower {
-                        timer: env.make_time(150000, 299999),
+                        timer: env.make_time(ELECTION_TIMEOUT),
                     };
                 } else if term > self.term {
                     self.step_down(env, term);
