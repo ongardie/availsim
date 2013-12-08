@@ -6,8 +6,8 @@ use std::fmt;
 use sim::Environment;
 use std::hashmap::HashSet;
 
-static ELECTION_TIMEOUT : (uint, uint) = (150000, 299999);
-static HEARTBEAT_TIMEOUT : (uint, uint) = (75000, 75000);
+static ELECTION_TIMEOUT : (uint, uint) = (100000, 199999);
+static HEARTBEAT_TIMEOUT : (uint, uint) = (50000, 50000);
 
 #[deriving(Clone)]
 pub struct Message {
