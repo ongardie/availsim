@@ -188,6 +188,11 @@ impl Cluster {
                     server.lastLogIndex = Index(*length);
                 }
             },
+            "diff-eqid" => {
+                for server in self.mut_iter() {
+                    server.lastLogIndex = Index(*server.id);
+                }
+            },
             "diff-oldstale" => {
                 use std::rand::Rng;
                 let mut lengths = range(1, self.len() + 1).to_owned_vec();

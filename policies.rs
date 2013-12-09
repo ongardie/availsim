@@ -116,7 +116,7 @@ pub fn make(name: &str) -> ~TimingPolicy {
         as ~TimingPolicy,
         "RAMCloud" => ~Uniform(5, 10)
         as ~TimingPolicy,
-        "WAN" => ~Uniform(30000, 70000)
+        "WAN" => ~Uniform(10000, 20000)
         as ~TimingPolicy,
         "P1" => ~Partitions(~[
                     partition!(Down: 1),

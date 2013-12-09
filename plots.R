@@ -62,6 +62,7 @@ timeline <- function(run) {
            geom_point(aes(x=time/1e3, y=server, color=state, shape=state),
                       size=3) +
            expand_limits(y=c(1,7)) +
+           scale_x_continuous(breaks=function(l) { seq(0, l[2], 100)}) +
            scale_y_reverse(breaks=1:7) +
            geom_text(aes(x=time/1e3, y=server-.5, label=(term %% 10)), vjust=1) +
            xlab('Time (ms)') +

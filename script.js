@@ -51,6 +51,7 @@ var fill = function(name, div, opts) {
 fill('logs', $('#logs'), [
   'same',
   'diff',
+  'diff-eqid',
   'diff-oldstale',
   'diff-oldminstale',
   'diff-136stale',
@@ -80,6 +81,7 @@ fill('algorithm', $('#algorithm'), [
   'stalelognobump',
   'zookeeper',
   'zookeeper2',
+  'lease',
 ]);
 
 fill('terms', $('#terms'), [

@@ -31,6 +31,7 @@ enum VoteGranted {
     TERM_STALE,
     LOG_STALE,
     VOTED,
+    LEASE,
 }
 
 impl fmt::Default for VoteGranted {
@@ -40,6 +41,7 @@ impl fmt::Default for VoteGranted {
             TERM_STALE => "TERM_STALE",
             LOG_STALE  => "LOG_STALE",
             VOTED      => "VOTED",
+            LEASE      => "LEASE",
         });
     }
 }
@@ -90,6 +92,7 @@ impl fmt::Default for MessageBody {
 enum ServerState {
     Follower  {
         timer: Time,
+        last_heartbeat: Time,
     },
     Candidate {
         timer: Time,
@@ -147,9 +150,9 @@ impl fmt::Default for Configuration {
 impl fmt::Default for ServerState {
     fn fmt(state: &ServerState, f: &mut fmt::Formatter) {
         match *state {
-            Follower{timer} => {
-                write!(f.buf, "Follower(timer: {})",
-                       timer)
+            Follower{timer, last_heartbeat} => {
+                write!(f.buf, "Follower(timer: {}, last_heartbeat: {})",
+                       timer, last_heartbeat)
             },
             Candidate{timer, votes: ref votes, should_retry, pre, max_term, endorsements: ref endorsements} => {
                 write!(f.buf, "Candidate(timer: {}, votes: {}, should_retry: {}, pre: {}, max_term: {}, endorsements: {})",
@@ -213,6 +216,7 @@ impl Server {
             "hesitant2"     |
             "zookeeper"     |
             "zookeeper2"    |
+            "lease"         |
             "submission"    => {},
             _ => fail!("Unknown algorithm: {}", algorithm)
         };
@@ -221,7 +225,10 @@ impl Server {
             config: config,
             algorithm: algorithm.into_owned(),
             term: Term(0),
-            state: Follower { timer: env.make_time(ELECTION_TIMEOUT) },
+            state: Follower {
+              timer: env.make_time(ELECTION_TIMEOUT),
+              last_heartbeat: Time(0),
+            },
             lastLogIndex: Index(0),
             vote: None,
         }
@@ -312,15 +319,16 @@ impl Server {
     }
 
     fn step_down(&mut self, env: &Environment, term: Term) {
-        let t = match self.state {
-            Follower { timer, .. } => timer,
-            Candidate { timer, .. } => timer,
-            Leader{..} => env.make_time(ELECTION_TIMEOUT),
+        let (t, lh) = match self.state {
+            Follower { timer, last_heartbeat } => (timer, last_heartbeat),
+            Candidate { timer, .. } => (timer, Time(0)),
+            Leader{..} => (env.make_time(ELECTION_TIMEOUT), env.clock),
         };
         self.term = term;
         self.vote = None;
         self.state = Follower {
             timer: t,
+            last_heartbeat: lh,
         };
     }
 
@@ -373,6 +381,17 @@ impl Server {
                 if term < self.term {
                     reply(TERM_STALE);
                 } else {
+                    if self.algorithm == ~"lease" {
+                      if match self.state {
+                        Follower { last_heartbeat, .. } =>
+                          last_heartbeat + ELECTION_TIMEOUT.first() > env.clock,
+                        Candidate { .. } => false,
+                        Leader { .. } => true,
+                      } {
+                        reply(LEASE);
+                        return;
+                      }
+                    }
                     if term > self.term {
                         match self.algorithm {
                             ~"nograntnobump"  => {},
@@ -449,7 +468,7 @@ impl Server {
                                     GRANTED => {
                                         votes.insert(msg.from);
                                     },
-                                    TERM_STALE | VOTED => {
+                                    TERM_STALE | VOTED | LEASE => {
                                         endorsements.insert(msg.from);
                                         if self.algorithm == ~"hesitant" {
                                             *should_retry = true;
@@ -479,6 +498,7 @@ impl Server {
                 if term == self.term {
                     self.state = Follower {
                         timer: env.make_time(ELECTION_TIMEOUT),
+                        last_heartbeat: env.clock,
                     };
                 } else if term > self.term {
                     self.step_down(env, term);
