@@ -63,12 +63,12 @@ timeline <- function(run) {
                       size=3) +
            expand_limits(y=c(1,7)) +
            scale_y_reverse(breaks=1:7) +
-           geom_text(aes(x=time/1e3, y=server-.5, label=term), vjust=1) +
+           geom_text(aes(x=time/1e3, y=server-.5, label=(term %% 10)), vjust=1) +
            xlab('Time (ms)') +
            ylab('Server')
     ggsave(plot=g$timeline,
            filename=sprintf('timeline%06d.svg', run),
-           width=10, height=3.5)
+           width=max(10, min(max(events$time / 100000), 49)), height=3.5)
 
 }
 
