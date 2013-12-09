@@ -42,21 +42,22 @@ impl Environment {
         extra::sort::quick_sort(self.network, |x,y| x.deliver <= y.deliver);
     }
     pub fn multicast(&mut self, from: ServerID, to: &Configuration, body: &MessageBody) {
+        let mut peers = HashSet::<ServerID>::new();
         for l in to.iter() {
-            for peer in l.iter() {
-                if *peer != from {
-                    let m = SimMessage {
-                        sent: self.clock,
-                        deliver: self.clock + self.timing.network_latency(from, *peer),
-                        msg: Message {
-                            from: from,
-                            to: *peer,
-                            body: *body,
-                        },
-                    };
-                    self.network.push(m);
-                }
-            }
+            peers.extend(&mut l.clone().move_iter());
+        }
+        peers.remove(&from);
+        for peer in peers.iter() {
+            let m = SimMessage {
+                sent: self.clock,
+                deliver: self.clock + self.timing.network_latency(from, *peer),
+                msg: Message {
+                    from: from,
+                    to: *peer,
+                    body: *body,
+                },
+            };
+            self.network.push(m);
         }
         self.sort_network();
     }
