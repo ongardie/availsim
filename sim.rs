@@ -221,6 +221,16 @@ impl Cluster {
                     };
                 }
             },
+            "1old2both3old4new5new6old7new" => {
+              for server in self.mut_iter() {
+                server.lastLogIndex = match server.id {
+                  ServerID(1) | ServerID(3) | ServerID(6) => Index(1),
+                  ServerID(2) => Index(2),
+                  ServerID(4) | ServerID(5) | ServerID(7) => Index(3),
+                  _ => fail!("Bad server"),
+                }
+              }
+            },
             _ => fail!("Unknown log length policy: {}", policy)
         }
     }

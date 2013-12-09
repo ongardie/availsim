@@ -54,6 +54,7 @@ fill('logs', $('#logs'), [
   'diff-oldstale',
   'diff-oldminstale',
   'diff-136stale',
+  "1old2both3old4new5new6old7new",
 ]);
 
 fill('timing', $('#timing'), [
