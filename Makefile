@@ -20,7 +20,7 @@ data/%/meta.csv data/%/samples.csv: data/%/args.txt
 	cd $$(dirname $@); \
 	pwd; \
 	touch -a args.txt; \
-	../../main --servers=5 $$(cat args.txt); \
+	../../main $$(cat args.txt); \
 	)
 
 .PRECIOUS: data/%/meta.csv
@@ -33,6 +33,13 @@ data/%/Rplots.svg: data/%/meta.csv data/%/samples.csv
 	Rscript ../../plots.R; \
 	)
 
+%.pdf: %.svg
+	inkscape -T -z -A $@ $<
+
+data/%/Rplots.pdf: data/%/Rplots.svg
+	inkscape -T -z -A $@ $<
+
+
 timings=$(patsubst data/%/args.txt, %, $(wildcard data/*/args.txt))
 
 index.html:
@@ -41,7 +48,18 @@ index.html:
 		echo '<img src="data/'$$t'/Rplots.svg" style="border: 1px solid black;" />' >> index.html; \
 	done
 
-plots: index.html $(addprefix data/, $(addsuffix /Rplots.svg, $(timings)))
+#plots: index.html $(addprefix data/, $(addsuffix /Rplots.svg, $(timings)))
+plots: $(addprefix data/, $(addsuffix /Rplots.pdf, $(timings)))
+
+lunch/timelines/%/timeline.svg:
+	( \
+	cd $$(dirname $@); \
+	pwd; \
+	Rscript tl.R; \
+	)
+
+timelines=$(patsubst lunch/timelines/%/tl.R, %, $(wildcard lunch/timelines/*/tl.R))
+timelines: $(addprefix lunch/timelines/, $(addsuffix /timeline.pdf, $(timelines)))
 
 clean:
 	rm -f data/*/*.svg

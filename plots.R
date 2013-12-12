@@ -13,9 +13,9 @@ reverselog_trans <- function(base = exp(1)) {
 
 gtheme <- theme_bw(base_size = 12, base_family = "") +
           theme(plot.margin=unit(c(.2,0,0,0), 'cm'),
-                legend.margin=unit(0, 'cm'),
-                axis.title=element_text(size = rel(.8)),
-                plot.title=element_text(size = rel(.8)))
+                legend.margin=unit(0, 'cm'))
+                #axis.title=element_text(size = rel(.8)),
+                #plot.title=element_text(size = rel(.8)))
 
 cdf <- function() {
 
@@ -30,25 +30,44 @@ cdf <- function() {
     g <- {}
 
     g$johncdf <- ggplot(run) + gtheme +
-           stat_ecdf(aes(x=election_time/1e6)) +
+           stat_ecdf(aes(x=election_time/1e3)) +
            scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
                               trans=reverselog_trans(10)) +
-           expand_limits(x=c(0, 1)) +
-           xlab('Election Time (s)') +
+           expand_limits(x=c(0, 1000)) +
+           xlab('Election Time (ms)') +
            ylab('Cumulative Fraction') +
-           geom_vline(xintercept = 1)
+           geom_vline(xintercept = 1000)
 
 
     g$cdf <- ggplot(run) + gtheme +
-           stat_ecdf(aes(x=election_time/1e6)) +
-           coord_cartesian(x=c(0, 1)) +
-           xlab('Election Time (s)') +
+           stat_ecdf(aes(x=election_time/1e3)) +
+           coord_cartesian(x=c(0, 1000)) +
+           scale_x_continuous(breaks=seq(0, 1000, 100)) +
+           scale_y_continuous(breaks=seq(0, 1, .1)) +
+           xlab('Election Time (ms)') +
            ylab('Cumulative Fraction')
 
     ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=title),
             filename='Rplots.svg',
             width=7, height=3.5)
 
+}
+
+# just used for lunch talk, sligtly different
+timeline_plot <- function(run) {
+    events = read.csv(sprintf('events%06d.csv', run))
+    events$state = factor(events$state,
+                          levels=c('F', 'C', 'L'))
+
+    ggplot(events) + gtheme +
+           geom_point(aes(x=time/1e3, y=server, color=state, shape=state),
+                      size=2) +
+           expand_limits(y=c(1,7)) +
+           scale_x_continuous(breaks=function(l) { seq(0, l[2], 100)}) +
+           scale_y_reverse(breaks=1:7) +
+           geom_text(aes(x=time/1e3, y=server-.6, label=(term %% 10)), vjust=1, size=3) +
+           xlab('Time (ms)') +
+           ylab('Server')
 }
 
 timeline <- function(run) {
