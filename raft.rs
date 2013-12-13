@@ -182,6 +182,14 @@ impl Configuration {
         }
         return true;
     }
+    fn can_quorum_without(&self, servers: &HashSet<ServerID>) -> bool {
+        for c in self.iter() {
+            if c.difference(servers).len() <= c.len() / 2 {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 struct Server {
@@ -192,16 +200,18 @@ struct Server {
     state: ServerState,
     vote: Option<ServerID>,
     lastLogIndex: Index,
+    rejections: HashSet<ServerID>,
 }
 
 impl fmt::Default for Server {
     fn fmt(server: &Server, f: &mut fmt::Formatter) {
-        write!(f.buf, "Server(id: {}, term: {}, log: {}, vote: {}, state: {})",
+        write!(f.buf, "Server(id: {}, term: {}, log: {}, vote: {}, state: {}, rejections: {})",
                server.id,
                server.term,
                server.lastLogIndex,
                server.vote,
-               server.state)
+               server.state,
+               server.rejections)
     }
 }
 
@@ -214,6 +224,7 @@ impl Server {
             "stalelognobump" |
             "hesitant"      |
             "hesitant2"     |
+            "phesitant"     |
             "zookeeper"     |
             "zookeeper2"    |
             "lease"         |
@@ -231,9 +242,24 @@ impl Server {
             },
             lastLogIndex: Index(0),
             vote: None,
+            rejections: HashSet::new(),
         }
     }
     fn start_new_election(&mut self, env: &mut Environment, forceTerm: Option<Term>) {
+        if self.algorithm == ~"phesitant" {
+            if (!self.config.can_quorum_without(&self.rejections)) {
+                match self.state {
+                    Follower { timer: ref mut timer, .. } |
+                    Candidate { timer: ref mut timer, .. } => {
+                        if *timer <= env.clock {
+                            *timer = env.make_time(ELECTION_TIMEOUT);
+                        }
+                    },
+                    _ => fail!("Start new election from Leader?"),
+                }
+                return;
+            }
+        }
         let pre = forceTerm.is_none() && match self.algorithm {
             ~"zookeeper"  => true,
             ~"zookeeper2" => true,
@@ -252,6 +278,7 @@ impl Server {
             should_retry: match self.algorithm {
                 ~"hesitant"  => false,
                 ~"hesitant2" => false,
+                ~"phesitant" => false,
                 _ => true,
             },
             pre: pre,
@@ -479,7 +506,9 @@ impl Server {
                                             }
                                         }
                                     },
-                                    LOG_STALE => {},
+                                    LOG_STALE => {
+                                        self.rejections.insert(msg.from);
+                                    },
                                 }
                             }
                         },

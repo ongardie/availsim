@@ -76,8 +76,8 @@ fill('timing', $('#timing'), [
 
 fill('algorithm', $('#algorithm'), [
   'submission',
-  'hesitant',
   'hesitant2',
+  'phesitant',
   'nograntnobump',
   'stalelognobump',
   'zookeeper',
