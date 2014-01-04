@@ -29,11 +29,15 @@ cdf <- function() {
 
     g <- {}
 
+    etmean <- mean(run$election_time) / 1e3
+    etcdf <- ecdf(run$election_time / 1e3)
+
     g$johncdf <- ggplot(run) + gtheme +
            stat_ecdf(aes(x=election_time/1e3)) +
            scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
                               trans=reverselog_trans(10)) +
            expand_limits(x=c(0, 1000)) +
+           geom_point(x=etmean, y=1-log(1-etcdf(etmean), 10)) +
            xlab('Election Time (ms)') +
            ylab('Cumulative Fraction') +
            geom_vline(xintercept = 1000)
@@ -44,6 +48,7 @@ cdf <- function() {
            coord_cartesian(x=c(0, 1000)) +
            scale_x_continuous(breaks=seq(0, 1000, 100)) +
            scale_y_continuous(breaks=seq(0, 1, .1)) +
+           geom_point(x=etmean, y=etcdf(etmean)) +
            xlab('Election Time (ms)') +
            ylab('Cumulative Fraction')
 
