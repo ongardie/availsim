@@ -25,6 +25,7 @@ data/%/meta.csv data/%/samples.csv: data/%/args.txt
 
 .PRECIOUS: data/%/meta.csv
 .PRECIOUS: data/%/samples.csv
+.PRECIOUS: data/%/Rplots.svg
 
 data/%/Rplots.svg: data/%/meta.csv data/%/samples.csv
 	( \

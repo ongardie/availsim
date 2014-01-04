@@ -45,8 +45,8 @@ cdf <- function() {
 
     g$cdf <- ggplot(run) + gtheme +
            stat_ecdf(aes(x=election_time/1e3)) +
-           coord_cartesian(x=c(0, 1000)) +
-           scale_x_continuous(breaks=seq(0, 1000, 100)) +
+           coord_cartesian(x=c(0, 1050)) +
+           scale_x_continuous(breaks=seq(0, 1050, 100)) +
            scale_y_continuous(breaks=seq(0, 1, .1)) +
            geom_point(x=etmean, y=etcdf(etmean)) +
            xlab('Election Time (ms)') +
