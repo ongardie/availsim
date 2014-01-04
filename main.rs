@@ -301,15 +301,25 @@ fn main() {
 
     let end_ns = extra::time::precise_time_ns();
     let elapsed_ns = end_ns - start_ns;
+    let mean_ticks = {
+        let mut total = 0;
+        for sample in samples.iter() {
+            total += *sample.ticks;
+        }
+        total / samples.len()
+    };
+
     meta.push((~"wall",   format!("{}", elapsed_ns as f64 / 1e9)));
     meta.push((~"trials", format!("{}", samples.len())));
     meta.push((~"min",    format!("{}", samples[0].ticks)));
     meta.push((~"median", format!("{}", samples[samples.len()/2].ticks)));
+    meta.push((~"mean",   format!("{}", mean_ticks)));
     meta.push((~"max",    format!("{}", samples[samples.len()-1].ticks)));
 
     println!("Trials:     {}",       samples.len());
     println!("Min:        {} ticks", samples[0].ticks);
     println!("Median:     {} ticks", samples[samples.len()/2].ticks);
+    println!("Mean:       {} ticks", mean_ticks);
     println!("Max:        {} ticks", samples[samples.len()-1].ticks);
     println!("Wall:       {:.2f} s", elapsed_ns as f64 / 1e9);
 
