@@ -56,6 +56,7 @@ fill('logs', $('#logs'), [
   'diff-oldminstale',
   'diff-136stale',
   '1old2old3new4new5both6old',
+  '1both2new3new4new5new6new',
   '1old2both3old4new5new6old7new',
 ]);
 
@@ -97,6 +98,7 @@ fill('cluster', $('#cluster'), [
   '9',
   '5-2+2',
   '1-5to2-6:1old2old3new4new5both6old',
+  '1-5to2-6:1both2new3new4new5new6new',
   '1-5to3-7:1old2both3old4both5both6old7both',
   '1-5to3-7:1old2both3old4new5new6old7new',
 ]);
@@ -196,6 +198,7 @@ form.submit(function() {
               .prop('href', '')
               .append((row.election_time / 1e3).toFixed(0))
               .click(function() {
+                console.log('run: ' + dir + ' ' + zeropad(6, row.run.toString()));
                 fs.readFile(dir + '/trace' + zeropad(6, row.run.toString()) + '.html',
                             {encoding: 'utf8', flag: 'r'},
                             function (err, data) {

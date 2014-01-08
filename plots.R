@@ -226,16 +226,17 @@ multicdf <- function(dirs, labels, legendlabel, legendrows=3) {
 # just used for lunch talk, sligtly different
 timeline_plot <- function(run) {
     events = read.csv(sprintf('events%06d.csv', run))
-    events$state = factor(events$state,
-                          levels=c('F', 'C', 'L'))
-
+    events$State = factor(events$state,
+                          levels=c('F', 'C', 'L'),
+                          labels=c('Follower', 'Candidate', 'Leader'))
+    events <- cbind(events, servers=max(events$server))
     ggplot(events) + gtheme +
-           geom_point(aes(x=time/1e3, y=server, color=state, shape=state),
-                      size=2) +
-           expand_limits(y=c(1,7)) +
+           geom_point(aes(x=time/1e3, y=server, color=State, shape=State),
+                      size=3) +
+           expand_limits(y=c(1,events$servers)) +
            scale_x_continuous(breaks=function(l) { seq(0, l[2], 100)}) +
-           scale_y_reverse(breaks=1:7) +
-           geom_text(aes(x=time/1e3, y=server-.6, label=(term %% 10)), vjust=1, size=3) +
+           scale_y_reverse(breaks=1:events$servers) +
+           geom_text(aes(x=time/1e3, y=server-ifelse(servers > 5, .6, .4), label=(term %% 10)), vjust=1, size=4) +
            xlab('Time (ms)') +
            ylab('Server')
 }
