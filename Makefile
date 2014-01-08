@@ -34,6 +34,9 @@ data/%/Rplots.svg: data/%/meta.csv data/%/samples.csv
 	Rscript ../../plots.R; \
 	)
 
+data/multi-%/Rplots.svg: plots.R
+	R -e 'multi=T; source("plots.R");'
+
 %.pdf: %.svg
 	inkscape -T -z -A $@ $<
 
@@ -41,7 +44,8 @@ data/%/Rplots.pdf: data/%/Rplots.svg
 	inkscape -T -z -A $@ $<
 
 
-timings=$(patsubst data/%/args.txt, %, $(wildcard data/*/args.txt))
+timings=$(patsubst data/%/args.txt, %, $(wildcard data/*/args.txt)) \
+        $(patsubst data/%/multi, %, $(wildcard data/*/multi))
 
 index.html:
 	echo > index.html

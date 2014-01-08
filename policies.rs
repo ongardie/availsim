@@ -134,6 +134,10 @@ pub fn make(name: &str) -> ~TimingPolicy {
                     partition!(Down: 1 2),
                     partition!(LAN:  3 4 5),
         ]) as ~TimingPolicy,
+        "P2-WAN" => ~Partitions(~[
+                    partition!(Down: 1 2),
+                    partition!(WAN:  3 4 5),
+        ]) as ~TimingPolicy,
         "P2-RAMCloud" => ~Partitions(~[
                     partition!(Down: 1 2),
                     partition!(RAMCloud:  3 4 5),

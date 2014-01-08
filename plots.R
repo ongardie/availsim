@@ -13,50 +13,202 @@ reverselog_trans <- function(base = exp(1)) {
 
 gtheme <- theme_bw(base_size = 12, base_family = "") +
           theme(plot.margin=unit(c(.2,0,0,0), 'cm'),
-                legend.margin=unit(0, 'cm'))
-                #axis.title=element_text(size = rel(.8)),
-                #plot.title=element_text(size = rel(.8)))
+                legend.margin=unit(0, 'cm'),
+                axis.title=element_text(size = rel(.8)),
+                plot.title=element_text(size = rel(.8)))
 
-cdf <- function() {
+earliest <- function(x, s, b, mint=100, maxt=200) {
+    ifelse(x < mint + 2*b,
+           0,
+           ifelse(x > maxt + 2*b,
+             1,
+             1 - (1-(x-mint-2*b)/(maxt-mint))^s
+           )
+          )
+}
 
-    meta = read.csv('meta.csv')
-    run = read.csv('samples.csv')
+summation <- function(lower, upper, fun) {
+  s = 0
+  for (i in lower:upper) {
+    s = s + fun(i)
+  }
+  s
+}
 
-    title <- with(meta,
-                sprintf('%s / %s / logs %s / terms %s /\ncluster %s / %d heartbeats / %s trials',
-                        algorithm, timing, log_length, terms, cluster, heartbeats,
-                        format(trials, big.mark=',')))
+distance <- function(d, c, s) {
+  ifelse(d < 0, 0, ifelse(d > 1, 1,
+         summation(0, s-c+1, function(i) {
+           choose(s, i) * d**(s-i) * (1-d)**i
+         })
+         ))
+}
+
+overall_sample <- function(s, b, b2, mint=100, maxt=200) {
+  r <- 0
+  while (T) {
+    r <- r + mint + min(sample.int(maxt-mint, size=s)) + b2
+    if (distance(b/(maxt-mint),3,s) < sample.int(1e9, size=1)/1e9)
+      break
+  }
+  r
+}
+
+overall_cdf <- function(s, b, b2, mint=100, maxt=200) {
+  data.frame(x=sapply(1:100000,
+             function(x) { overall_sample(s=s, b=b, b2=b2) + b2 }))
+}
+
+make_title <- function(meta) {
+    with(meta,
+         sprintf('%s / %s / logs %s / terms %s / cluster %s / %d heartbeats / %s trials',
+                 algorithm, timing, log_length, terms, cluster, heartbeats,
+                 format(trials, big.mark=',')))
+}
+
+johncdfscalelab <-function(b) {
+           b +
+           scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
+                              trans=reverselog_trans(10)) +
+           expand_limits(x=c(0, 1000)) +
+           xlab('Election Time (ms)') +
+           ylab('Cumulative Fraction') +
+           geom_vline(xintercept = 1000)
+}
+
+cdfscalelab <- function(b) {
+           b +
+           coord_cartesian(x=c(0, 1060)) +
+           scale_x_continuous(breaks=seq(0, 1060, 100),
+                              labels=c(0, '', 200, '', 400, '', 600, '', 800, '', 1000),
+                              limits=c(0,1060)) +
+           scale_y_continuous(breaks=seq(0, 1, .1), limits=c(0,1)) +
+           xlab('Election Time (ms)') +
+           ylab('Cumulative Fraction')
+}
+
+cdf <- function(thesis) {
+
+    dir <- basename(getwd())
+
+    meta <- read.csv('meta.csv')
+    run <- read.csv('samples.csv')
+
+    title <- make_title(meta)
 
     g <- {}
 
     etmean <- mean(run$election_time) / 1e3
     etcdf <- ecdf(run$election_time / 1e3)
 
-    g$johncdf <- ggplot(run) + gtheme +
-           stat_ecdf(aes(x=election_time/1e3)) +
-           scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
-                              trans=reverselog_trans(10)) +
-           expand_limits(x=c(0, 1000)) +
-           geom_point(x=etmean, y=1-log(1-etcdf(etmean), 10)) +
-           xlab('Election Time (ms)') +
-           ylab('Cumulative Fraction') +
-           geom_vline(xintercept = 1000)
+    g$johncdf <- ggplot(run) + gtheme
+    if (thesis & dir == 'submission-normal-RAMCloud') {
+      g$johncdf <- g$johncdf +
+           stat_function(fun=earliest, arg=list(s=meta$cluster, b=0), color='blue')
+    }
+    if (thesis & dir == 'submission-normal-LAN') {
+      g$johncdf <- g$johncdf +
+           stat_ecdf(data=overall_cdf(s=meta$cluster, b=3.5/2, b2=3.5), aes(x=x), color='blue')
+    }
+    if (thesis & dir == 'submission-normal-WAN') {
+      g$johncdf <- g$johncdf +
+           stat_ecdf(data=overall_cdf(s=meta$cluster, b=7.5, b2=15), aes(x=x), color='blue')
+    }
+    g$johncdf <- g$johncdf +
+           stat_ecdf(aes(x=election_time/1e3))
+    g$johncdf <- johncdfscalelab(g$johncdf) +
+           geom_point(x=etmean, y=1-log(1-etcdf(etmean), 10))
 
 
-    g$cdf <- ggplot(run) + gtheme +
-           stat_ecdf(aes(x=election_time/1e3)) +
-           coord_cartesian(x=c(0, 1050)) +
-           scale_x_continuous(breaks=seq(0, 1050, 100)) +
-           scale_y_continuous(breaks=seq(0, 1, .1)) +
-           geom_point(x=etmean, y=etcdf(etmean)) +
-           xlab('Election Time (ms)') +
-           ylab('Cumulative Fraction')
+    g$cdf <- ggplot(run) + gtheme
+    if (thesis & dir == 'submission-normal-RAMCloud') {
+      g$cdf <- g$cdf +
+           stat_function(fun=earliest, arg=list(s=meta$cluster, b=0), color='blue')
+    }
+    if (thesis & dir == 'submission-normal-LAN') {
+      g$cdf <- g$cdf +
+           stat_ecdf(data=overall_cdf(s=meta$cluster, b=3.5/2, b2=3.5), aes(x=x), color='blue')
+    }
+    if (thesis & dir == 'submission-normal-WAN') {
+      g$cdf <- g$cdf +
+           stat_ecdf(data=overall_cdf(s=meta$cluster, b=7.5, b2=15), aes(x=x), color='blue')
+    }
+    g$cdf <- g$cdf +
+           stat_ecdf(aes(x=election_time/1e3))
+    g$cdf <- cdfscalelab(g$cdf) +
+           geom_point(x=etmean, y=etcdf(etmean))
 
-    ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=title),
+    ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=textGrob(title, gp=gpar(cex=.3))),
             filename='Rplots.svg',
-            width=7, height=3.5)
+            width=6, height=2)
 
 }
+
+g_legend <- function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+
+
+multicdf <- function(dirs, labels, legendlabel) {
+
+    topdir <- getwd()
+    meta <- data.frame()
+    run <- data.frame()
+    means <- data.frame()
+    for (i in 1:length(dirs)) {
+      setwd(dirs[i])
+      dirmeta <- cbind(read.csv('meta.csv'), label=labels[i])
+      dirrun <- cbind(read.csv('samples.csv'), label=labels[i])
+      rbind(meta, dirmeta)->meta
+      rbind(run, dirrun)->run
+
+      dirmean <- mean(dirrun$election_time) / 1e3
+      dirfraction <- ecdf(dirrun$election_time / 1e3)(dirmean)
+      rbind(means, data.frame(etmean=dirmean,
+                              fraction=dirfraction,
+                              label=labels[i]))->means
+      setwd(topdir)
+    }
+
+    print(head(meta))
+    print(head(run))
+    print(head(means))
+
+
+    title <- make_title(meta)
+
+    g <- {}
+
+
+    g$johncdf <- ggplot(run) + gtheme
+    g$johncdf <- g$johncdf +
+           stat_ecdf(aes(x=election_time/1e3, color=label))
+    g$johncdf <- johncdfscalelab(g$johncdf) +
+           geom_point(data=means, aes(x=etmean, y=fraction, color=label))
+
+
+    g$cdf <- ggplot(run) + gtheme + scale_colour_discrete(legendlabel)
+    g$cdf <- g$cdf +
+           stat_ecdf(aes(x=election_time/1e3, color=label))
+    g$cdf <- cdfscalelab(g$cdf) +
+           geom_point(data=means, aes(x=etmean, y=fraction, color=label))
+
+    #ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=textGrob(title, gp=gpar(cex=.3))),
+    #        filename='Rplots.svg',
+    #        width=6, height=2)
+
+    arrangeGrob(arrangeGrob(g$cdf + theme(legend.position="none"),
+                            g$johncdf + theme(legend.position="none"),
+                            nrow=1,
+                            main=textGrob(title, gp=gpar(cex=.3))),
+                g_legend(g$cdf),
+                nrow=2,
+                heights=c(4/6,2/6))
+}
+
 
 # just used for lunch talk, sligtly different
 timeline_plot <- function(run) {
@@ -105,7 +257,16 @@ if (exists('repl') && repl) {
         setwd(home)
         write('--DONE--\n', '')
     }
+} else if (exists('multi') && multi) {
+  ggsave(multicdf(c('data/submission-normal-WAN',
+                    'data/submission-P1-WAN',
+                    'data/submission-P2-WAN'),
+                  c('f=0', 'f=1', 'f=2'),
+                  'Server Failures'),
+      filename='data/multi-submission-failures/Rplots.svg',
+      width=6,
+      height=3)
 } else {
-    cdf()
+    cdf(thesis=T)
 }
 
