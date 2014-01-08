@@ -1,0 +1,1 @@
+--algorithm submission --timing P1-WAN --logs diff

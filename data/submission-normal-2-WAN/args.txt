@@ -1,0 +1,1 @@
+--algorithm submission --timing WAN --cluster 2

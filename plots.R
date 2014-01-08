@@ -86,7 +86,7 @@ cdfscalelab <- function(b) {
            ylab('Cumulative Fraction')
 }
 
-cdf <- function(thesis) {
+cdf <- function(thesis=F) {
 
     dir <- basename(getwd())
 
@@ -150,9 +150,11 @@ g_legend <- function(a.gplot){
   return(legend)
 }
 
+nolegend <- function(p) {
+  p + theme(legend.position="none")
+}
 
-
-multicdf <- function(dirs, labels, legendlabel) {
+multicdf_helper <- function(dirs, labels, legendlabel, legendrows=3) {
 
     topdir <- getwd()
     meta <- data.frame()
@@ -173,9 +175,9 @@ multicdf <- function(dirs, labels, legendlabel) {
       setwd(topdir)
     }
 
-    print(head(meta))
-    print(head(run))
-    print(head(means))
+    #print(head(meta))
+    #print(head(run))
+    #print(head(means))
 
 
     title <- make_title(meta)
@@ -190,7 +192,8 @@ multicdf <- function(dirs, labels, legendlabel) {
            geom_point(data=means, aes(x=etmean, y=fraction, color=label))
 
 
-    g$cdf <- ggplot(run) + gtheme + scale_colour_discrete(legendlabel)
+    g$cdf <- ggplot(run) + gtheme + scale_colour_discrete(legendlabel) +
+             guides(col=guide_legend(nrow = legendrows))
     g$cdf <- g$cdf +
            stat_ecdf(aes(x=election_time/1e3, color=label))
     g$cdf <- cdfscalelab(g$cdf) +
@@ -200,13 +203,23 @@ multicdf <- function(dirs, labels, legendlabel) {
     #        filename='Rplots.svg',
     #        width=6, height=2)
 
+    list(cdf=g$cdf, johncdf=g$johncdf, title=title)
+}
+
+multicdf <- function(dirs, labels, legendlabel, legendrows=3) {
+    if (legendrows == 1) {
+      heights <- c(5/6, 1/6)
+    } else {
+      heights <- c(4/6, 2/6)
+    }
+    g <- multicdf_helper(dirs, labels, legendlabel, legendrows)
     arrangeGrob(arrangeGrob(g$cdf + theme(legend.position="none"),
                             g$johncdf + theme(legend.position="none"),
                             nrow=1,
-                            main=textGrob(title, gp=gpar(cex=.3))),
+                            main=textGrob(g$title, gp=gpar(cex=.3))),
                 g_legend(g$cdf),
                 nrow=2,
-                heights=c(4/6,2/6))
+                heights=heights)
 }
 
 
@@ -262,11 +275,66 @@ if (exists('repl') && repl) {
                     'data/submission-P1-WAN',
                     'data/submission-P2-WAN'),
                   c('f=0', 'f=1', 'f=2'),
-                  'Server Failures'),
+                  'Server Failures',
+                  legendrows=1),
       filename='data/multi-submission-failures/Rplots.svg',
       width=6,
       height=3)
+  ggsave(multicdf(c('data/submission-normal-logsdiff-WAN',
+                    'data/submission-P1-logsdiff-WAN',
+                    'data/submission-P2-logsdiff-WAN'),
+                  c('f=0', 'f=1', 'f=2'),
+                  'Server Failures',
+                  legendrows=1),
+      filename='data/multi-submission-failures-logsdiff/Rplots.svg',
+      width=6,
+      height=3)
+  logsdiff_wan <- multicdf_helper(
+                          c('data/submission-normal-2-WAN',
+                            'data/submission-normal-3-WAN',
+                            'data/submission-normal-WAN',
+                            'data/submission-logsdiff-5-WAN',
+                            #'data/submission-logsdiff-5-P2-WAN',
+                            'data/submission-logsdiff-9-WAN'),
+                          c('2 servers, logs same',
+                            '3 servers, logs same',
+                            '5 servers, logs same',
+                            '5 servers, logs differ',
+                            #'5 servers, logs differ, P2',
+                            '9 servers, logs differ'),
+                          'Server Failures')
+  logsdiff_ramcloud <- multicdf_helper(
+                          c('data/submission-normal-2-RAMCloud',
+                            'data/submission-normal-3-RAMCloud',
+                            'data/submission-normal-RAMCloud',
+                            'data/submission-logsdiff-5-RAMCloud',
+                            'data/submission-logsdiff-9-RAMCloud'),
+                          c('2 servers, logs same',
+                            '3 servers, logs same',
+                            '5 servers, logs same',
+                            '5 servers, logs differ',
+                            '9 servers, logs differ'),
+                          'Server Failures')
+  ggsave(
+    arrangeGrob(
+                arrangeGrob(nolegend(logsdiff_ramcloud$cdf),
+                            nolegend(logsdiff_ramcloud$johncdf),
+                            nrow=1,
+                            main=textGrob(logsdiff_ramcloud$title, gp=gpar(cex=.3))),
+                arrangeGrob(nolegend(logsdiff_wan$cdf),
+                            nolegend(logsdiff_wan$johncdf),
+                            nrow=1,
+                            main=textGrob(logsdiff_wan$title, gp=gpar(cex=.3))),
+                g_legend(logsdiff_wan$cdf),
+                nrow=3,
+                heights=c(2/5,2/5,1/5)),
+      filename='data/multi-submission-logsdiff/Rplots.svg',
+      width=6,
+      height=6.5)
+  #ggsave(multicdf(c(
+  #    filename='data/multi-submission-RAMCloud-logsdiff/Rplots.svg',
+  #    width=6,
+  #    height=3.5)
 } else {
     cdf(thesis=T)
 }
-

@@ -1,0 +1,1 @@
+--algorithm stalelognobump --timing RAMCloud --logs diff-eqid
