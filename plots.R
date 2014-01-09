@@ -77,7 +77,7 @@ johncdfscalelab <-function(b) {
            scale_y_continuous(breaks=breaks,
                               labels=labels,
                               trans=reverselog_trans(10)) +
-           expand_limits(x=c(0, 1000)) +
+           expand_limits(x=c(0, 1000), y=c(0, .99)) +
            xlab('Election Time (ms)') +
            ylab('Cumulative Fraction') +
            geom_vline(xintercept = 1000)
