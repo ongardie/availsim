@@ -66,8 +66,16 @@ make_title <- function(meta) {
 }
 
 johncdfscalelab <-function(b) {
-           b +
-           scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
+  breaks <- c(0, 1:9*10**-1, 1-9:1*10**-2, 1-9:1*10**-3, 1-9:1*10**-4)
+  labels <- c()
+  for (i in 1:length(breaks)) {
+    labels <- append(labels, ifelse(i %% 9 == 1, breaks[i], ''))
+  }
+  b +
+           #scale_y_continuous(breaks=c(0, .9, .99, .999, .9999, .99999, .999999),
+           #                   trans=reverselog_trans(10)) +
+           scale_y_continuous(breaks=breaks,
+                              labels=labels,
                               trans=reverselog_trans(10)) +
            expand_limits(x=c(0, 1000)) +
            xlab('Election Time (ms)') +
@@ -79,8 +87,7 @@ cdfscalelab <- function(b) {
            b +
            coord_cartesian(x=c(0, 1060)) +
            scale_x_continuous(breaks=seq(0, 1060, 100),
-                              labels=c(0, '', 200, '', 400, '', 600, '', 800, '', 1000),
-                              limits=c(0,1060)) +
+                              labels=c(0, '', 200, '', 400, '', 600, '', 800, '', 1000)) +
            scale_y_continuous(breaks=seq(0, 1, .1), limits=c(0,1)) +
            xlab('Election Time (ms)') +
            ylab('Cumulative Fraction')
@@ -222,6 +229,21 @@ multicdf <- function(dirs, labels, legendlabel, legendrows=3) {
                 heights=heights)
 }
 
+multimulticdf <- function(top, bottom, heights) {
+    arrangeGrob(
+                arrangeGrob(nolegend(top$cdf),
+                            nolegend(top$johncdf),
+                            nrow=1,
+                            main=textGrob(top$title, gp=gpar(cex=.3))),
+                arrangeGrob(nolegend(bottom$cdf),
+                            nolegend(bottom$johncdf),
+                            nrow=1,
+                            main=textGrob(bottom$title, gp=gpar(cex=.3))),
+                g_legend(top$cdf),
+                nrow=3,
+                heights=heights)
+}
+
 
 # just used for lunch talk, sligtly different
 timeline_plot <- function(run) {
@@ -281,7 +303,7 @@ if (exists('repl') && repl) {
       filename='data/multi-submission-failures/Rplots.svg',
       width=6,
       height=3)
-  ggsave(multicdf(c('data/submission-normal-logsdiff-WAN',
+  ggsave(multicdf(c('data/submission-logsdiff-5-WAN',
                     'data/submission-P1-logsdiff-WAN',
                     'data/submission-P2-logsdiff-WAN'),
                   c('f=0', 'f=1', 'f=2'),
@@ -290,6 +312,24 @@ if (exists('repl') && repl) {
       filename='data/multi-submission-failures-logsdiff/Rplots.svg',
       width=6,
       height=3)
+  logsdiff_wan <- multicdf_helper(
+                      c('data/submission-logsdiff-5-WAN',
+                        'data/stalelognobump-logsdiff-5-WAN'),
+                      c('submission',
+                        'stale-log-no-bump'),
+                      'Algorithm')
+  logsdiff_ramcloud <- multicdf_helper(
+                      c('data/submission-logsdiff-5-RAMCloud',
+                        'data/stalelognobump-logsdiff-5-RAMCloud'),
+                      c('submission',
+                        'stale-log-no-bump'),
+                      'Algorithm')
+  ggsave(multimulticdf(logsdiff_ramcloud, logsdiff_wan,
+                       heights=c(2.15/5,2.15/5,.7/5)),
+         filename='data/multi-stalelognobump-logsdiff/Rplots.svg',
+         width=6,
+         height=6.5)
+
   logsdiff_wan <- multicdf_helper(
                           c('data/submission-normal-2-WAN',
                             'data/submission-normal-3-WAN',
@@ -316,26 +356,11 @@ if (exists('repl') && repl) {
                             '5 servers, logs differ',
                             '9 servers, logs differ'),
                           'Server Failures')
-  ggsave(
-    arrangeGrob(
-                arrangeGrob(nolegend(logsdiff_ramcloud$cdf),
-                            nolegend(logsdiff_ramcloud$johncdf),
-                            nrow=1,
-                            main=textGrob(logsdiff_ramcloud$title, gp=gpar(cex=.3))),
-                arrangeGrob(nolegend(logsdiff_wan$cdf),
-                            nolegend(logsdiff_wan$johncdf),
-                            nrow=1,
-                            main=textGrob(logsdiff_wan$title, gp=gpar(cex=.3))),
-                g_legend(logsdiff_wan$cdf),
-                nrow=3,
-                heights=c(2/5,2/5,1/5)),
-      filename='data/multi-submission-logsdiff/Rplots.svg',
-      width=6,
-      height=6.5)
-  #ggsave(multicdf(c(
-  #    filename='data/multi-submission-RAMCloud-logsdiff/Rplots.svg',
-  #    width=6,
-  #    height=3.5)
+  ggsave(multimulticdf(logsdiff_ramcloud, logsdiff_wan,
+                       heights=c(2/5,2/5,1/5)),
+         filename='data/multi-submission-logsdiff/Rplots.svg',
+         width=6,
+         height=6.5)
 } else {
     cdf(thesis=T)
 }

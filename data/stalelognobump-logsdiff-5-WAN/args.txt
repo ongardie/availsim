@@ -1,0 +1,1 @@
+--algorithm stalelognobump --timing WAN --logs diff-eqid
