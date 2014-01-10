@@ -13,12 +13,13 @@ pub fn randrange(min : uint, max : uint) -> uint {
     }
 }
 
-#[deriving(Eq, IterBytes, Clone, Ord)]
+#[deriving(Eq, TotalEq, IterBytes, Clone, TotalOrd, ToStr)]
 pub struct ServerID(uint);
 
 impl fmt::Default for ServerID {
     fn fmt(id: &ServerID, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **id)
+        let ServerID(v) = *id;
+        write!(f.buf, "{}", v)
     }
 }
 
@@ -26,24 +27,31 @@ impl fmt::Default for ServerID {
 #[deriving(Eq, Ord, Clone)]
 pub struct Term(uint);
 
-impl fmt::Default for Term {
-    fn fmt(term: &Term, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **term)
+impl Term {
+    pub fn next(&self) -> Term {
+        let Term(v) = *self;
+        Term(v + 1)
     }
 }
 
+impl fmt::Default for Term {
+    fn fmt(term: &Term, f: &mut fmt::Formatter) {
+        let Term(v) = *term;
+        write!(f.buf, "{}", v)
+    }
+}
 
 #[deriving(Ord, Clone)]
 pub struct Index(uint);
 
 impl fmt::Default for Index {
     fn fmt(index: &Index, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **index)
+        let Index(v) = *index;
+        write!(f.buf, "{}", v)
     }
 }
 
-
-#[deriving(Eq, Ord, Clone)]
+#[deriving(Eq, TotalEq, Ord, TotalOrd, Clone)]
 pub struct Time(uint);
 
 // An integer big enough to represent infinity in the simulations, but small
@@ -54,13 +62,15 @@ pub static INFINITY : uint = 1<<30;
 
 impl Add<uint, Time> for Time {
     fn add(&self, rhs: &uint) -> Time {
-      Time(**self + *rhs)
-  }
+        let Time(v) = *self;
+        Time(v + *rhs)
+    }
 }
 
 impl fmt::Default for Time {
     fn fmt(time: &Time, f: &mut fmt::Formatter) {
-        write!(f.buf, "{}", **time)
+        let Time(v) = *time;
+        write!(f.buf, "{}", v)
     }
 }
 

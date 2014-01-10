@@ -21,7 +21,7 @@ impl fmt::Default for SimMessage {
 }
 
 
-struct Environment {
+pub struct Environment {
     clock: Time,
     network: ~[SimMessage],
     timing: ~TimingPolicy,
@@ -39,11 +39,11 @@ impl Environment {
         self.clock + randrange(range.first(), range.second())
     }
     fn sort_network(&mut self) {
-        extra::sort::quick_sort(self.network, |x,y| x.deliver <= y.deliver);
+        self.network.sort_by(|x,y| x.deliver.cmp(&y.deliver));
     }
     pub fn multicast(&mut self, from: ServerID, to: &Configuration, body: &MessageBody) {
         let mut peers = HashSet::<ServerID>::new();
-        for l in to.iter() {
+        for l in to.get().iter() {
             peers.extend(&mut l.clone().move_iter());
         }
         peers.remove(&from);
@@ -95,7 +95,9 @@ impl Environment {
     }
 }
 
-struct Cluster(~[Server]);
+struct Cluster {
+    servers: ~[Server]
+}
 
 impl Cluster {
     fn new(env: &Environment, policy: &str, algorithm: &str) -> Cluster {
@@ -127,7 +129,7 @@ impl Cluster {
                 servers.push(Server::new(ServerID(5), Configuration(~[new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(6), Configuration(~[new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(7), Configuration(~[new.clone()]), env, algorithm));
-                Cluster(servers)
+                Cluster { servers: servers }
             },
             "1-5to3-7:1old2both3old4both5both6old7both" => {
                 let old = newHashSet([ServerID(1), ServerID(2), ServerID(3),
@@ -142,7 +144,7 @@ impl Cluster {
                 servers.push(Server::new(ServerID(5), Configuration(~[old.clone(), new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(6), Configuration(~[old.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(7), Configuration(~[old.clone(), new.clone()]), env, algorithm));
-                Cluster(servers)
+                Cluster { servers: servers }
             },
             "1-5to3-7:1old2both3old4new5new6old7new" => {
                 let old = newHashSet([ServerID(1), ServerID(2), ServerID(3),
@@ -157,7 +159,7 @@ impl Cluster {
                 servers.push(Server::new(ServerID(5), Configuration(~[new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(6), Configuration(~[old.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(7), Configuration(~[new.clone()]), env, algorithm));
-                Cluster(servers)
+                Cluster { servers: servers }
             },
             "1-5to2-6:1old2old3new4new5both6old" => {
                 let old = newHashSet([ServerID(1), ServerID(2), ServerID(3),
@@ -171,7 +173,7 @@ impl Cluster {
                 servers.push(Server::new(ServerID(4), Configuration(~[new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(5), Configuration(~[old.clone(), new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(6), Configuration(~[old.clone()]), env, algorithm));
-                Cluster(servers)
+                Cluster { servers: servers }
             },
             "1-5to2-6:1both2new3new4new5new6new" => {
                 let old = newHashSet([ServerID(1), ServerID(2), ServerID(3),
@@ -185,7 +187,7 @@ impl Cluster {
                 servers.push(Server::new(ServerID(4), Configuration(~[new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(5), Configuration(~[new.clone()]), env, algorithm));
                 servers.push(Server::new(ServerID(6), Configuration(~[new.clone()]), env, algorithm));
-                Cluster(servers)
+                Cluster { servers: servers }
             },
             _ => fail!("Unknown cluster policy: {}", policy)
         }
@@ -201,32 +203,33 @@ impl Cluster {
             let s = Server::new(ServerID(i + 1), Configuration(~[config]), env, algorithm);
             servers.push(s);
         }
-        return Cluster(servers);
+        return Cluster { servers: servers };
     }
 
     fn set_log_lengths(&mut self, policy: &str) {
         match policy {
-            "same" => for server in self.mut_iter() {
+            "same" => for server in self.servers.mut_iter() {
                 server.lastLogIndex = Index(0);
             },
             "diff" => {
                 use std::rand::Rng;
-                let mut lengths = range(0, self.len()).to_owned_vec();
+                let mut lengths = range(0, self.servers.len()).to_owned_vec();
                 std::rand::task_rng().shuffle_mut(lengths);
-                for (server, length) in self.mut_iter().zip(lengths.iter()) {
+                for (server, length) in self.servers.mut_iter().zip(lengths.iter()) {
                     server.lastLogIndex = Index(*length);
                 }
             },
             "diff-eqid" => {
-                for server in self.mut_iter() {
-                    server.lastLogIndex = Index(*server.id);
+                for server in self.servers.mut_iter() {
+                    let ServerID(i) = server.id;
+                    server.lastLogIndex = Index(i);
                 }
             },
             "diff-oldstale" => {
                 use std::rand::Rng;
-                let mut lengths = range(1, self.len() + 1).to_owned_vec();
+                let mut lengths = range(1, self.servers.len() + 1).to_owned_vec();
                 std::rand::task_rng().shuffle_mut(lengths);
-                for (server, length) in self.mut_iter().zip(lengths.iter()) {
+                for (server, length) in self.servers.mut_iter().zip(lengths.iter()) {
                     server.lastLogIndex = match server.id {
                         ServerID(1) | ServerID(2) => Index(0),
                         _ => Index(*length),
@@ -235,9 +238,9 @@ impl Cluster {
             },
             "diff-oldminstale" => {
                 use std::rand::Rng;
-                let mut lengths = range(1, self.len() + 1).to_owned_vec();
+                let mut lengths = range(1, self.servers.len() + 1).to_owned_vec();
                 std::rand::task_rng().shuffle_mut(lengths);
-                for (server, length) in self.mut_iter().zip(lengths.iter()) {
+                for (server, length) in self.servers.mut_iter().zip(lengths.iter()) {
                     server.lastLogIndex = match server.id {
                         ServerID(1) | ServerID(2) | ServerID(3) | ServerID(4) => Index(0),
                         _ => Index(*length),
@@ -246,9 +249,9 @@ impl Cluster {
             },
             "diff-136stale" => {
                 use std::rand::Rng;
-                let mut lengths = range(1, self.len() + 1).to_owned_vec();
+                let mut lengths = range(1, self.servers.len() + 1).to_owned_vec();
                 std::rand::task_rng().shuffle_mut(lengths);
-                for (server, length) in self.mut_iter().zip(lengths.iter()) {
+                for (server, length) in self.servers.mut_iter().zip(lengths.iter()) {
                     server.lastLogIndex = match server.id {
                         ServerID(1) | ServerID(3) | ServerID(6) => Index(0),
                         _ => Index(*length),
@@ -256,7 +259,7 @@ impl Cluster {
                 }
             },
             "1old2both3old4new5new6old7new" => {
-              for server in self.mut_iter() {
+              for server in self.servers.mut_iter() {
                 server.lastLogIndex = match server.id {
                   ServerID(1) | ServerID(3) | ServerID(6) => Index(1),
                   ServerID(2) => Index(2),
@@ -266,7 +269,7 @@ impl Cluster {
               }
             },
             "1old2old3new4new5both6old" => {
-              for server in self.mut_iter() {
+              for server in self.servers.mut_iter() {
                 server.lastLogIndex = match server.id {
                   ServerID(1) | ServerID(2) | ServerID(6) => Index(1),
                   ServerID(5) => Index(2),
@@ -276,7 +279,7 @@ impl Cluster {
               }
             },
             "1both2new3new4new5new6new" => {
-              for server in self.mut_iter() {
+              for server in self.servers.mut_iter() {
                 server.lastLogIndex = match server.id {
                   ServerID(1) => Index(2),
                   ServerID(2) | ServerID(3) | ServerID(4) |
@@ -291,14 +294,14 @@ impl Cluster {
 
     fn set_terms(&mut self, policy: &str) {
         match policy {
-            "same" => for server in self.mut_iter() {
+            "same" => for server in self.servers.mut_iter() {
                 server.term = Term(0);
             },
             "diff" => {
                 use std::rand::Rng;
-                let mut terms = range(0, self.len()).to_owned_vec();
+                let mut terms = range(0, self.servers.len()).to_owned_vec();
                 std::rand::task_rng().shuffle_mut(terms);
-                for (server, term) in self.mut_iter().zip(terms.iter()) {
+                for (server, term) in self.servers.mut_iter().zip(terms.iter()) {
                     server.term = Term(*term);
                 }
             },
@@ -307,7 +310,8 @@ impl Cluster {
     }
 
     fn deliver(&mut self, env: &mut Environment, msg: &Message) {
-        self[*msg.to - 1].handle(env, msg);
+        let ServerID(i) = msg.to;
+        self.servers[i - 1].handle(env, msg);
     }
 }
 
@@ -385,7 +389,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
 
     let mut last_tick_server_strs = ~[];
     let mut last_tick_server_states = ~[];
-    for _ in range(0, cluster.len()) {
+    for _ in range(0, cluster.servers.len()) {
         last_tick_server_strs.push(~"");
         last_tick_server_states.push(('_', Term(0)));
     }
@@ -399,7 +403,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
             end = Some(opts.max_ticks);
             break;
         }
-        for server in cluster.mut_iter() {
+        for server in cluster.servers.mut_iter() {
             server.tick(env);
         }
 
@@ -410,7 +414,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         }
         ready_msgs.truncate(0);
 
-        for server in cluster.iter() {
+        for server in cluster.servers.iter() {
             end = server.stable_leader_start_time(opts.heartbeats);
             if end.is_some() {
                 break;
@@ -420,9 +424,10 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         match tracewriter {
             Some(ref mut w) => {
                 writeln!(*w, "<div class=\"list-group-item\">");
-                writeln!(*w, "<h4>{:0.03f} ms</h4>", (*env.clock as f64) / 1000.0);
+                let Time(t) = env.clock;
+                writeln!(*w, "<h4>{:0.03f} ms</h4>", (t as f64) / 1000.0);
                 writeln!(*w, "<pre>");
-                for (server, last) in cluster.iter().zip(last_tick_server_strs.mut_iter()) {
+                for (server, last) in cluster.servers.iter().zip(last_tick_server_strs.mut_iter()) {
                     let s = format!("{}", *server);
                     if (*last != s) {
                         writeln!(*w, "<span class=\"new\">{}</span>", s);
@@ -447,7 +452,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
 
         match eventswriter {
             Some(ref mut w) => {
-                for (server, last) in cluster.iter().zip(last_tick_server_states.mut_iter()) {
+                for (server, last) in cluster.servers.iter().zip(last_tick_server_states.mut_iter()) {
                     let s = (server.state.to_char(), server.term);
                     if (*last != s) {
                         writeln!(*w, "{},{},{},{}", env.clock, server.id, s.first(), s.second());
@@ -459,7 +464,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         }
 
         next_tick = std::cmp::min(next_tick, env.next_tick());
-        for server in cluster.iter() {
+        for server in cluster.servers.iter() {
             next_tick = std::cmp::min(next_tick, server.next_tick());
         }
         assert!(next_tick > env.clock,

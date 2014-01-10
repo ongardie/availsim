@@ -19,8 +19,8 @@ pub struct Message {
 impl fmt::Default for Message {
     fn fmt(msg: &Message, f: &mut fmt::Formatter) {
         write!(f.buf, "{} to {}: {}",
-               *msg.from,
-               *msg.to,
+               msg.from,
+               msg.to,
                msg.body);
     }
 }
@@ -129,21 +129,11 @@ impl fmt::Default for HashSet<ServerID> {
     fn fmt(set: &HashSet<ServerID>, f: &mut fmt::Formatter) {
         write!(f.buf, "\\{");
         let mut sorted = set.iter().to_owned_vec();
-        extra::sort::tim_sort(sorted);
+        sorted.sort();
         for s in sorted.iter() {
             write!(f.buf, "{}", **s);
         }
         write!(f.buf, "\\}");
-    }
-}
-
-impl fmt::Default for Configuration {
-    fn fmt(config: &Configuration, f: &mut fmt::Formatter) {
-        write!(f.buf, "[");
-        for c in config.iter() {
-            write!(f.buf, "{}", *c);
-        }
-        write!(f.buf, "]");
     }
 }
 
@@ -171,11 +161,22 @@ struct LogEntry {
     // command: ~str,
 }
 
-struct Configuration(~[HashSet<ServerID>]);
+pub struct Configuration(~[HashSet<ServerID>]);
+
+impl fmt::Default for Configuration {
+    fn fmt(config: &Configuration, f: &mut fmt::Formatter) {
+        write!(f.buf, "[");
+        for c in config.get().iter() {
+            write!(f.buf, "{}", *c);
+        }
+        write!(f.buf, "]");
+    }
+}
+
 
 impl Configuration {
     fn is_quorum(&self, servers: &HashSet<ServerID>) -> bool {
-        for c in self.iter() {
+        for c in self.get().iter() {
             if c.intersection(servers).len() <= c.len() / 2 {
                 return false;
             }
@@ -183,16 +184,21 @@ impl Configuration {
         return true;
     }
     fn can_quorum_without(&self, servers: &HashSet<ServerID>) -> bool {
-        for c in self.iter() {
+        for c in self.get().iter() {
             if c.difference(servers).len() <= c.len() / 2 {
                 return false;
             }
         }
         return true;
     }
+    pub fn get<'a>(&'a self) -> &'a ~[HashSet<ServerID>] {
+        let Configuration(ref v) = *self;
+        v
+    }
+
 }
 
-struct Server {
+pub struct Server {
     id: ServerID,
     config: Configuration,
     algorithm: ~str,
@@ -267,8 +273,8 @@ impl Server {
         };
         if !pre {
             self.term = match forceTerm {
-                Some(t) if t > self.term => Term(*t + 1),
-                _                        => Term(*self.term + 1),
+                Some(t) if t > self.term => t.next(),
+                _                        => self.term.next(),
             };
             self.vote = None;
         }

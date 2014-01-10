@@ -37,6 +37,12 @@ impl TimingPolicy for Stochastic {
 }
 
 struct Partitions(~[Partition]);
+impl Partitions {
+    fn get<'a>(&'a self) -> &'a ~[Partition] {
+        let Partitions(ref v) = *self;
+        v
+    }
+}
 
 struct Partition {
     servers: HashSet<ServerID>,
@@ -54,7 +60,7 @@ impl Partition {
 
 impl TimingPolicy for Partitions {
     fn network_latency(&self, from: ServerID, to: ServerID) -> uint {
-        for partition in self.iter() {
+        for partition in self.get().iter() {
             if partition.servers.contains(&from) &&
                partition.servers.contains(&to) {
                 return partition.timing.network_latency(from, to);

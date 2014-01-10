@@ -1,3 +1,4 @@
+#[allow(dead_code)];
 #[feature(globs)];
 #[feature(struct_variant)];
 #[feature(macro_rules)];
@@ -12,62 +13,22 @@ mod policies;
 mod raft;
 mod sim;
 
-
-/* features to support selectmatch */
-
-/* SelectBox is a wrapper to allow calling select() on pointers */
-struct SelectBox<'self> {
-    inner: &'self mut std::select::Select,
+// Copied from libstd since there's no way to use macros from different files yet.
+macro_rules! select {
+    (
+        $name1:pat = $port1:ident.$meth1:ident() => $code1:expr,
+        $($name:pat = $port:ident.$meth:ident() => $code:expr),*
+    ) => ({
+        use std::comm::Select;
+        let sel = Select::new();
+        let mut $port1 = sel.add(&mut $port1);
+        $( let mut $port = sel.add(&mut $port); )*
+        let ret = sel.wait();
+        if ret == $port1.id { let $name1 = $port1.$meth1(); $code1 }
+        $( else if ret == $port.id { let $name = $port.$meth(); $code } )*
+        else { unreachable!() }
+    })
 }
-
-impl<'self> std::rt::shouldnt_be_public::SelectInner for SelectBox<'self> {
-    fn optimistic_check(&mut self) -> bool {
-        self.inner.optimistic_check()
-    }
-    fn block_on(&mut self, sched: &mut std::rt::sched::Scheduler, task: std::rt::BlockedTask) -> bool {
-        self.inner.block_on(sched, task)
-    }
-    fn unblock_from(&mut self) -> bool {
-        self.inner.unblock_from()
-    }
-}
-
-impl<'self> std::select::Select for SelectBox<'self> {
-}
-
-/* recursive helper for selectmatch macro */
-macro_rules! selectmatch_rec(
-    ($index:expr,
-     $port:expr => $action:expr,
-     $( $port_rest:expr => $action_rest:expr ),+) => (
-        if $index == 0 {
-            $action
-        } else {
-            $index -= 1;
-            selectmatch_rec!($index, $( $port_rest => $action_rest ),*)
-        }
-    );
-    ($index:expr, $port:expr => $action:expr) => (
-        if $index == 0 {
-            $action
-        } else {
-            fail!("Bogus return value from select()");
-        }
-    );
-)
-
-/* bearable syntax for calling select with SelectBox */
-macro_rules! selectmatch(
-     ($( $port:expr => $action:expr ),+) => (
-        {
-            let mut selectmatch_i : uint = std::select::select([$( SelectBox{ inner: &mut $port as &mut std::select::Select } ),+]);
-            selectmatch_rec!(selectmatch_i, $( $port => $action ),+)
-        }
-    );
-)
-
-/* end selectmatch */
-
 
 fn main() {
     let args = std::os::args();
@@ -244,8 +205,7 @@ fn main() {
     let samples = if num_tasks <= 1 {
         run_task(std::iter::range_step(0, num_samples, 1), &sim_opts, &signals.port)
     } else {
-        let (mut port, chan): (std::comm::Port<~[Sample]>, std::comm::Chan<~[Sample]>) = stream();
-        let chan = std::comm::SharedChan::new(chan);
+        let (mut port, chan): (std::comm::Port<~[Sample]>, std::comm::SharedChan<~[Sample]>) = std::comm::SharedChan::new();
         let mut exit_chans : ~[std::comm::Chan<()>] = ~[];
         let exit = || {
             for c in exit_chans.iter() {
@@ -253,7 +213,7 @@ fn main() {
             }
         };
         for tid in range(0, num_tasks) {
-            let (exit_port, exit_chan): (std::comm::Port<()>, std::comm::Chan<()>) = stream();
+            let (exit_port, exit_chan): (std::comm::Port<()>, std::comm::Chan<()>) = std::comm::Chan::new();
             exit_chans.push(exit_chan);
             let child_chan = chan.clone();
             let child_opts = sim_opts.clone();
@@ -271,27 +231,27 @@ fn main() {
         // I can't get the types to work otherwise
         let mut timeout_port = timeout_timer.periodic(timeout as u64);
         let mut timed_out = false;
+        let mut sp = signals.port; // select! macro can't handle signals.port.recv()
         while tasks_outstanding > 0 {
-            selectmatch!(
-                signals.port.x => {
-                    match signals.port.recv() {
+            select!(
+                v = sp.recv() => {
+                    match v {
                         std::io::signal::Interrupt => {
                             println!("\nCtrl-C: exiting");
                         },
                         _ => fail!("Unexpected signal"),
                     }
                 },
-                timeout_port.x => {
-                    timeout_port.recv();
+                _ = timeout_port.recv() => {
                     if !timed_out {
                         println!("Timeout");
                         timed_out = true;
                         exit();
                     }
                 },
-                port.x => {
+                v = port.recv() => {
                     tasks_outstanding -= 1;
-                    samples.push_all(port.recv());
+                    samples.push_all(v);
                 }
             )
         }
@@ -301,10 +261,11 @@ fn main() {
 
     let end_ns = extra::time::precise_time_ns();
     let elapsed_ns = end_ns - start_ns;
-    let mean_ticks = {
+    let mean_ticks : uint = {
         let mut total = 0;
         for sample in samples.iter() {
-            total += *sample.ticks;
+            let Time(t) = sample.ticks;
+            total += t;
         }
         total / samples.len()
     };
@@ -349,15 +310,14 @@ struct Sample {
 }
 
 fn sort_samples(samples: &mut ~[Sample]) {
-    // merge sort seems to greatly outperform quicksort for about 2500 samples
-    *samples = extra::sort::merge_sort(*samples, |x,y| x.ticks <= y.ticks);
+    samples.sort_by(|x,y| x.ticks.cmp(&y.ticks));
 }
 
 fn run_task<T: Send>(mut runs: std::iter::RangeStep<uint>, opts: &sim::SimOpts, exit_port: &Port<T>) -> ~[Sample] {
     let mut samples = ~[];
     samples.reserve(runs.size_hint().first());
     for run in runs {
-        if exit_port.peek() {
+        if exit_port.try_recv().is_some() {
             return samples;
         }
         let sample = Sample {
