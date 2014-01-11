@@ -209,7 +209,10 @@ fn main() {
         let mut exit_chans : ~[std::comm::Chan<()>] = ~[];
         let exit = || {
             for c in exit_chans.iter() {
-                c.send(());
+                // It's possible that the task has already returned, in which
+                // case send() would fail here. We use try_send() instead and
+                // ignore the result, since an exited task is what we want.
+                c.try_send(());
             }
         };
         for tid in range(0, num_tasks) {
