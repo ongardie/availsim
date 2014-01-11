@@ -144,7 +144,7 @@ cdf <- function(thesis=F) {
     g$cdf <- cdfscalelab(g$cdf) +
            geom_point(x=etmean, y=etcdf(etmean))
 
-    ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=textGrob(title, gp=gpar(cex=.3))),
+    ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=textGrob(title, gp=gpar(cex=.5))),
             filename='Rplots.svg',
             width=6, height=2)
 
