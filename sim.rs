@@ -189,6 +189,34 @@ impl Cluster {
                 servers.push(Server::new(ServerID(6), Configuration(~[new.clone()]), env, algorithm));
                 Cluster { servers: servers }
             },
+            "1-5to2-6:1old2both3both4both5both6both" => {
+                let old = newHashSet([ServerID(1), ServerID(2), ServerID(3),
+                                      ServerID(4), ServerID(5)]);
+                let new = newHashSet([ServerID(2), ServerID(3), ServerID(4),
+                                      ServerID(5), ServerID(6)]);
+                let mut servers = ~[];
+                servers.push(Server::new(ServerID(1), Configuration(~[old.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(2), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(3), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(4), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(5), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(6), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                Cluster { servers: servers }
+            },
+            "1-5to2-6:1old2new3new4new5old6old" => {
+                let old = newHashSet([ServerID(1), ServerID(2), ServerID(3),
+                                      ServerID(4), ServerID(5)]);
+                let new = newHashSet([ServerID(2), ServerID(3), ServerID(4),
+                                      ServerID(5), ServerID(6)]);
+                let mut servers = ~[];
+                servers.push(Server::new(ServerID(1), Configuration(~[old.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(2), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(3), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(4), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(5), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                servers.push(Server::new(ServerID(6), Configuration(~[new.clone(), new.clone()]), env, algorithm));
+                Cluster { servers: servers }
+            },
             _ => fail!("Unknown cluster policy: {}", policy)
         }
     }
@@ -284,6 +312,15 @@ impl Cluster {
                   ServerID(1) => Index(2),
                   ServerID(2) | ServerID(3) | ServerID(4) |
                   ServerID(5) | ServerID(6) => Index(3),
+                  _ => fail!("Bad server"),
+                }
+              }
+            },
+            "1old2new3new4new5old6old" => {
+              for server in self.servers.mut_iter() {
+                server.lastLogIndex = match server.id {
+                  ServerID(1) | ServerID(5) | ServerID(6) => Index(1),
+                  ServerID(2) | ServerID(3) | ServerID(4) => Index(3),
                   _ => fail!("Bad server"),
                 }
               }
