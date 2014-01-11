@@ -100,7 +100,7 @@ enum ServerState {
         /**
          * If true, when the timer fires, the candidate should start a new election.
          * If false, when the timer fires, set a new timer.
-         * Always true for submission algo, but sometimes false in hesitant, hesitant2.
+         * Always true for most algos, but sometimes false in hesitant, hesitant2 (but not phesitant).
          */
         should_retry: bool,
         pre: bool,
@@ -183,13 +183,13 @@ impl Configuration {
         }
         return true;
     }
-    fn can_quorum_without(&self, servers: &HashSet<ServerID>) -> bool {
+    fn need_for_quorum(&self, servers: &HashSet<ServerID>) -> bool {
         for c in self.get().iter() {
             if c.difference(servers).len() <= c.len() / 2 {
-                return false;
+                return true;
             }
         }
-        return true;
+        return false;
     }
     pub fn get<'a>(&'a self) -> &'a ~[HashSet<ServerID>] {
         let Configuration(ref v) = *self;
@@ -206,6 +206,11 @@ pub struct Server {
     state: ServerState,
     vote: Option<ServerID>,
     lastLogIndex: Index,
+    /*
+     * If RequestVote response comes back with LOG_STALE, sender gets added here.
+     * Servers are never removed.
+     * Used in persistent-hesitant algo.
+     */
     rejections: HashSet<ServerID>,
 }
 
@@ -253,7 +258,7 @@ impl Server {
     }
     fn start_new_election(&mut self, env: &mut Environment, forceTerm: Option<Term>) {
         if self.algorithm == ~"phesitant" {
-            if (!self.config.can_quorum_without(&self.rejections)) {
+            if (self.config.need_for_quorum(&self.rejections)) {
                 match self.state {
                     Follower { timer: ref mut timer, .. } |
                     Candidate { timer: ref mut timer, .. } => {
@@ -284,7 +289,7 @@ impl Server {
             should_retry: match self.algorithm {
                 ~"hesitant"  => false,
                 ~"hesitant2" => false,
-                ~"phesitant" => false,
+                //~"phesitant" => false,
                 _ => true,
             },
             pre: pre,
