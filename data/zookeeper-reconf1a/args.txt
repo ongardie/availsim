@@ -1,0 +1,1 @@
+ --algorithm=zookeeper --timing=WAN --logs=1both2new3new4new5new6new --cluster=1-5to2-6:1both2new3new4new5new6new

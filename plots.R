@@ -372,6 +372,17 @@ if (exists('repl') && repl) {
       filename='data/multi-phesitant-reconf/Rplots.svg',
       width=6,
       height=3)
+  ggsave(multicdf(c('data/zookeeper-reconf1a',
+                    'data/zookeeper-reconf1b',
+                    'data/zookeeper-reconf2'),
+                  c('(b) Replace 1 server',
+                    '(c) Replace 1 server',
+                    '(d) Replace 2 servers'),
+                  'Cluster',
+                  legendrows=3),
+      filename='data/multi-zookeeper-reconf/Rplots.svg',
+      width=6,
+      height=3)
 } else {
     cdf(thesis=T)
 }
