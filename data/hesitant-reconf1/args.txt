@@ -1,0 +1,1 @@
+--algorithm=hesitant2 --timing=WAN --logs=1old2old3new4new5both6old --cluster=1-5to2-6:1old2old3new4new5both6old

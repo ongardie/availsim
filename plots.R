@@ -361,6 +361,17 @@ if (exists('repl') && repl) {
          filename='data/multi-submission-logsdiff/Rplots.svg',
          width=6,
          height=6.5)
+  ggsave(multicdf(c('data/phesitant-reconf1a',
+                    'data/phesitant-reconf1b',
+                    'data/phesitant-reconf2'),
+                  c('(b) Replace 1 server',
+                    '(c) Replace 1 server',
+                    '(d) Replace 2 servers'),
+                  'Cluster',
+                  legendrows=3),
+      filename='data/multi-phesitant-reconf/Rplots.svg',
+      width=6,
+      height=3)
 } else {
     cdf(thesis=T)
 }
