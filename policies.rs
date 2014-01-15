@@ -124,6 +124,8 @@ pub fn make(name: &str) -> ~TimingPolicy {
         as ~TimingPolicy,
         "WAN" => ~Uniform(10000, 20000)
         as ~TimingPolicy,
+        "fWAN" => ~Uniform(15000, 15000)
+        as ~TimingPolicy,
         "P1" => ~Partitions(~[
                     partition!(Down: 1),
                     partition!(LAN:  2 3 4 5),

@@ -76,7 +76,9 @@ johncdfscalelab <-function(b) {
            #                   trans=reverselog_trans(10)) +
            scale_y_continuous(breaks=breaks,
                               labels=labels,
-                              trans=reverselog_trans(10)) +
+                              trans=reverselog_trans(10),
+                              limits=c(0, .9999),
+                              oob=rescale_none) +
            expand_limits(x=c(0, 1000), y=c(0, .99)) +
            xlab('Election Time (ms)') +
            ylab('Cumulative Fraction') +
@@ -144,7 +146,9 @@ cdf <- function(thesis=F) {
     g$cdf <- cdfscalelab(g$cdf) +
            geom_point(x=etmean, y=etcdf(etmean))
 
-    ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1, main=textGrob(title, gp=gpar(cex=.5))),
+    ggsave(plot=arrangeGrob(g$cdf, g$johncdf, nrow=1
+                            #, main=textGrob(title, gp=gpar(cex=.5))
+                            ),
             filename='Rplots.svg',
             width=6, height=2)
 
@@ -222,8 +226,9 @@ multicdf <- function(dirs, labels, legendlabel, legendrows=3) {
     g <- multicdf_helper(dirs, labels, legendlabel, legendrows)
     arrangeGrob(arrangeGrob(g$cdf + theme(legend.position="none"),
                             g$johncdf + theme(legend.position="none"),
-                            nrow=1,
-                            main=textGrob(g$title, gp=gpar(cex=.3))),
+                            nrow=1
+                            #, main=textGrob(g$title, gp=gpar(cex=.3))
+                            ),
                 g_legend(g$cdf),
                 nrow=2,
                 heights=heights)
@@ -233,12 +238,14 @@ multimulticdf <- function(top, bottom, heights) {
     arrangeGrob(
                 arrangeGrob(nolegend(top$cdf),
                             nolegend(top$johncdf),
-                            nrow=1,
-                            main=textGrob(top$title, gp=gpar(cex=.3))),
+                            nrow=1
+                            #, main=textGrob(top$title, gp=gpar(cex=.3))
+                            ),
                 arrangeGrob(nolegend(bottom$cdf),
                             nolegend(bottom$johncdf),
-                            nrow=1,
-                            main=textGrob(bottom$title, gp=gpar(cex=.3))),
+                            nrow=1
+                            #, main=textGrob(bottom$title, gp=gpar(cex=.3))
+                            ),
                 g_legend(top$cdf),
                 nrow=3,
                 heights=heights)
