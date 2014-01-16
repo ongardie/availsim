@@ -7,6 +7,7 @@ extern mod extra;
 use extra::getopts;
 use basics::*;
 use std::io::File;
+use sim::Sample;
 
 mod basics;
 mod policies;
@@ -299,17 +300,11 @@ fn main() {
 
     let runf = &mut File::create(&Path::new("samples.csv")).unwrap() as &mut Writer;
     let runf = &mut std::io::buffered::BufferedWriter::new(runf) as &mut Writer;
-    writeln!(runf, "election_time,run");
+    writeln!(runf, "election_time,run,leader");
     for sample in samples.iter() {
-        writeln!(runf, "{},{}", sample.ticks, sample.run);
+        writeln!(runf, "{},{},{}", sample.ticks, sample.run, sample.leader);
     }
     runf.flush();
-}
-
-#[deriving(Clone)]
-struct Sample {
-    run: uint,
-    ticks: Time,
 }
 
 fn sort_samples(samples: &mut ~[Sample]) {
@@ -321,13 +316,9 @@ fn run_task<T: Send>(mut runs: std::iter::RangeStep<uint>, opts: &sim::SimOpts, 
     samples.reserve(runs.size_hint().first());
     for run in runs {
         if exit_port.try_recv().is_some() {
-            return samples;
+            break;
         }
-        let sample = Sample {
-            run: run,
-            ticks: sim::simulate(run, opts),
-        };
-        samples.push(sample);
+        samples.push(sim::simulate(run, opts));
     }
     return samples;
 }

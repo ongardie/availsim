@@ -116,6 +116,7 @@ impl Cluster {
             "13" => Cluster::flat(env, 13, algorithm),
             "14" => Cluster::flat(env, 14, algorithm),
             "15" => Cluster::flat(env, 15, algorithm),
+            "99" => Cluster::flat(env, 99, algorithm),
             "5-2+2" => {
                 let old = newHashSet([ServerID(1), ServerID(2), ServerID(3),
                                       ServerID(4), ServerID(5)]);
@@ -364,7 +365,14 @@ pub struct SimOpts {
     trace: uint,
 }
 
-pub fn simulate(run: uint, opts: &SimOpts) -> Time {
+#[deriving(Clone)]
+pub struct Sample {
+    run: uint,
+    ticks: Time,
+    leader: ServerID,
+}
+
+pub fn simulate(run: uint, opts: &SimOpts) -> Sample {
 
     let mut tracefile = if run < opts.trace {
         let path = &std::path::posix::Path::new(format!("trace{:06u}.html", run));
@@ -423,6 +431,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
     let mut end = None;
     let mut ready_msgs = ~[]; // declared out here to avoid mallocs
     let mut next_tick = Time(0);
+    let mut leader = ServerID(0);
 
     let mut last_tick_server_strs = ~[];
     let mut last_tick_server_states = ~[];
@@ -454,6 +463,7 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         for server in cluster.servers.iter() {
             end = server.stable_leader_start_time(opts.heartbeats);
             if end.is_some() {
+                leader = server.id;
                 break;
             }
         }
@@ -519,5 +529,9 @@ pub fn simulate(run: uint, opts: &SimOpts) -> Time {
         None => {}
     }
 
-    return end.unwrap();
+    return Sample {
+        run: run,
+        ticks: end.unwrap(),
+        leader: leader,
+    }
 }
