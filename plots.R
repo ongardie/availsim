@@ -43,19 +43,19 @@ distance <- function(d, c, s) {
          ))
 }
 
-overall_sample <- function(s, b, b2, mint=100, maxt=200) {
+overall_sample <- function(p, s, l, mint=100, maxt=200) {
   r <- 0
   while (T) {
-    r <- r + mint + min(sample.int(maxt-mint, size=s)) + b2
-    if (distance(b/(maxt-mint),3,s) < sample.int(1e9, size=1)/1e9)
+    r <- r + mint + min(sample.int(maxt-mint, size=s)) + l
+    if (p < sample.int(1e9, size=1)/1e9)
       break
   }
   r
 }
 
-overall_cdf <- function(s, b, b2, mint=100, maxt=200) {
+overall_cdf <- function(p, s, l, mint=100, maxt=200) {
   data.frame(x=sapply(1:100000,
-             function(x) { overall_sample(s=s, b=b, b2=b2) + b2 }))
+             function(x) { overall_sample(p=p, s=s, l=l) + l }))
 }
 
 make_title <- function(meta) {
@@ -116,11 +116,11 @@ cdf <- function(thesis=F) {
     }
     if (thesis & dir == 'submission-normal-LAN') {
       g$johncdf <- g$johncdf +
-           stat_ecdf(data=overall_cdf(s=meta$cluster, b=3.5/2, b2=3.5), aes(x=x), color='blue')
+           stat_ecdf(data=overall_cdf(s=meta$cluster, p=.005/2, l=3.5), aes(x=x), color='blue')
     }
     if (thesis & dir == 'submission-normal-WAN') {
       g$johncdf <- g$johncdf +
-           stat_ecdf(data=overall_cdf(s=meta$cluster, b=7.5, b2=15), aes(x=x), color='blue')
+           stat_ecdf(data=overall_cdf(s=meta$cluster, p=.06, l=15), aes(x=x), color='blue')
     }
     g$johncdf <- g$johncdf +
            stat_ecdf(aes(x=election_time/1e3))
@@ -135,11 +135,11 @@ cdf <- function(thesis=F) {
     }
     if (thesis & dir == 'submission-normal-LAN') {
       g$cdf <- g$cdf +
-           stat_ecdf(data=overall_cdf(s=meta$cluster, b=3.5/2, b2=3.5), aes(x=x), color='blue')
+           stat_ecdf(data=overall_cdf(s=meta$cluster, p=.005/2, l=3.5), aes(x=x), color='blue')
     }
     if (thesis & dir == 'submission-normal-WAN') {
       g$cdf <- g$cdf +
-           stat_ecdf(data=overall_cdf(s=meta$cluster, b=7.5, b2=15), aes(x=x), color='blue')
+           stat_ecdf(data=overall_cdf(s=meta$cluster, p=.06, l=15), aes(x=x), color='blue')
     }
     g$cdf <- g$cdf +
            stat_ecdf(aes(x=election_time/1e3))
