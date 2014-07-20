@@ -19,9 +19,9 @@ gtheme <- theme_bw(base_size = 12, base_family = "") +
 
 earliest <- function(x, s, b, mint=100, maxt=200) {
     ifelse(x < mint + 2*b,
-           0,
+           NA,
            ifelse(x > maxt + 2*b,
-             1,
+             NA,
              1 - (1-(x-mint-2*b)/(maxt-mint))^s
            )
           )
@@ -81,8 +81,7 @@ johncdfscalelab <-function(b) {
                               oob=rescale_none) +
            expand_limits(x=c(0, 1000), y=c(0, .99)) +
            xlab('Election Time (ms)') +
-           ylab('Cumulative Fraction') +
-           geom_vline(xintercept = 1000)
+           ylab('Cumulative Fraction')
 }
 
 cdfscalelab <- function(b) {
